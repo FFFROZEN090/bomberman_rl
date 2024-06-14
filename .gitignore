@@ -111,3 +111,5 @@ screenshots/*.webm
 
 replays/
 results/
+
+.DS_Store

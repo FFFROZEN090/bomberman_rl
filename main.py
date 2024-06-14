@@ -37,54 +37,50 @@ def world_controller(world, n_rounds, *,
     gui_timekeeper = Timekeeper(update_interval)
 
     def render(wait_until_due):
-        # If every step should be displayed, wait until it is due to be shown
         if wait_until_due:
             gui_timekeeper.wait()
 
         if gui_timekeeper.is_due():
             gui_timekeeper.note()
-            # Render (which takes time)
             gui.render()
             pygame.display.flip()
 
     user_input = None
-    for _ in tqdm(range(n_rounds)):
+    for round_index in tqdm(range(n_rounds)):
+        print(f"Starting round {round_index + 1}/{n_rounds}")
         world.new_round()
         while world.running:
-            # Only render when the last frame is not too old
             if gui is not None:
                 render(every_step)
 
-                # Check GUI events
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
+                        print("Quit event detected")
                         return
                     elif event.type == pygame.KEYDOWN:
                         key_pressed = event.key
                         if key_pressed in ESCAPE_KEYS:
+                            print("Escape key pressed, ending round")
                             world.end_round()
                         elif key_pressed in s.INPUT_MAP:
                             user_input = s.INPUT_MAP[key_pressed]
 
-            # Advances step (for turn based: only if user input is available)
             if world.running and not (turn_based and user_input is None):
+                print("Advancing world step")
                 world.do_step(user_input)
                 user_input = None
-            else:
-                # Might want to wait
-                pass
 
-        # Save video of last game
         if make_video:
+            print("Making video of the last game")
             gui.make_video()
 
-        # Render end screen until next round is queried
         if gui is not None:
             do_continue = False
             while not do_continue:
                 render(True)
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
+                        print("Quit event detected during end screen")
                         return
                     elif event.type == pygame.KEYDOWN:
                         key_pressed = event.key
@@ -93,13 +89,12 @@ def world_controller(world, n_rounds, *,
 
     world.end()
 
-
 def main(argv = None):
+    print("Starting main function")
     parser = ArgumentParser()
 
     subparsers = parser.add_subparsers(dest='command_name', required=True)
 
-    # Run arguments
     play_parser = subparsers.add_parser("play")
     agent_group = play_parser.add_mutually_exclusive_group()
     agent_group.add_argument("--my-agent", type=str, help="Play agent of name ... against three rule_based_agents")
@@ -107,7 +102,6 @@ def main(argv = None):
     play_parser.add_argument("--train", default=0, type=int, choices=[0, 1, 2, 3, 4],
                              help="First … agents should be set to training mode")
     play_parser.add_argument("--continue-without-training", default=False, action="store_true")
-    # play_parser.add_argument("--single-process", default=False, action="store_true")
 
     play_parser.add_argument("--scenario", default="classic", choices=s.SCENARIOS)
 
@@ -123,11 +117,9 @@ def main(argv = None):
     group.add_argument("--skip-frames", default=False, action="store_true", help="Play several steps per GUI render.")
     group.add_argument("--no-gui", default=False, action="store_true", help="Deactivate the user interface and play as fast as possible.")
 
-    # Replay arguments
     replay_parser = subparsers.add_parser("replay")
     replay_parser.add_argument("replay", help="File to load replay from")
 
-    # Interaction
     for sub in [play_parser, replay_parser]:
         sub.add_argument("--turn-based", default=False, action="store_true",
                          help="Wait for key press until next movement")
@@ -136,11 +128,11 @@ def main(argv = None):
         sub.add_argument("--log-dir", default=os.path.dirname(os.path.abspath(__file__)) + "/logs")
         sub.add_argument("--save-stats", const=True, default=False, action='store', nargs='?', help='Store the game results as .json for evaluation')
 
-        # Video?
         sub.add_argument("--make-video", const=True, default=False, action='store', nargs='?',
                          help="Make a video from the game")
 
     args = parser.parse_args(argv)
+    print(f"Parsed arguments: {args}")
     if args.command_name == "replay":
         args.no_gui = False
         args.n_rounds = 1
@@ -151,7 +143,6 @@ def main(argv = None):
         if not LOADED_PYGAME:
             raise ValueError("pygame could not loaded, cannot run with GUI")
 
-    # Initialize environment and agents
     if args.command_name == "play":
         agents = []
         if args.train == 0 and not args.continue_without_training:
@@ -170,15 +161,16 @@ def main(argv = None):
     else:
         raise ValueError(f"Unknown command {args.command_name}")
 
-    # Launch GUI
     if has_gui:
+        print("Starting GUI")
         gui = GUI(world)
+        print("GUI started")
     else:
         gui = None
+    print("Starting world controller")
     world_controller(world, args.n_rounds,
                      gui=gui, every_step=every_step, turn_based=args.turn_based,
                      make_video=args.make_video, update_interval=args.update_interval)
-
 
 if __name__ == '__main__':
     main()
