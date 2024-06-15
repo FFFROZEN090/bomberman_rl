@@ -416,7 +416,7 @@ class BombeRLeWorld(GenericWorld):
         state['explosion_map'] = explosion_map
 
         return state
-
+    # TODO: Implement a manual agent action function
     def poll_and_run_agents(self):
         # Tell agents to act
         for a in self.active_agents:

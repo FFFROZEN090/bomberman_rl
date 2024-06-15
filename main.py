@@ -28,7 +28,7 @@ class Timekeeper:
             duration = self.next_time - time()
             sleep(duration)
 
-
+# TODO: Add a way to manually control one agent
 def world_controller(world, n_rounds, *,
                      gui, every_step, turn_based, make_video, update_interval):
     if make_video and not gui.screenshot_dir.exists():
@@ -47,13 +47,31 @@ def world_controller(world, n_rounds, *,
             gui.render()
             pygame.display.flip()
 
+
+    """
+    Replacable function for rendering based on user input
+    Get the user input KEY, if the key is in the input map, render the game for the next step
+    """
+    def input_based_render():
+        key_pressed = None
+        while key_pressed not in s.INPUT_MAP:
+            render(True)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return
+                elif event.type == pygame.KEYDOWN:
+                    key_pressed = event.key
+                    if key_pressed in ESCAPE_KEYS:
+                        world.end_round()
+        return s.INPUT_MAP[key_pressed]
+
     user_input = None
     for _ in tqdm(range(n_rounds)):
         world.new_round()
         while world.running:
             # Only render when the last frame is not too old
             if gui is not None:
-                render(every_step)
+                user_input = input_based_render()
 
                 # Check GUI events
                 for event in pygame.event.get():
@@ -80,9 +98,9 @@ def world_controller(world, n_rounds, *,
 
         # Render end screen until next round is queried
         if gui is not None:
-            do_continue = False
+            do_continue = True
             while not do_continue:
-                render(True)
+                input_based_render()
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         return
