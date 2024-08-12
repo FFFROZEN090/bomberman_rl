@@ -21,6 +21,7 @@ sdist/
 var/
 wheels/
 *.egg-info/
+References_for_bombman/
 .installed.cfg
 *.egg
 MANIFEST
