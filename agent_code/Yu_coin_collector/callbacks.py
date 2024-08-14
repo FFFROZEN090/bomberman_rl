@@ -7,7 +7,7 @@ import os
 import torch
 import torch.nn as nn
 
-from policynet import PolicyNet
+from .policynet import Policy
 
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
@@ -16,7 +16,7 @@ MODELNAME = 'my-saved-model.pt'
 def setup(self):
     np.random.seed()
     self.logger.info('Successfully entered setup code')
-    self.model = PolicyNet(len(ACTIONS))
+    self.model = Policy(len(ACTIONS))
     
     self.opponent_history = deque([], 5) # save the last 5 actions of the opponents
     self.bomb_history = deque([], 5) # save the last 5 bomb positions
@@ -48,11 +48,11 @@ def act(self, game_state):
     return action
 
 
-def state_to_features(self, game_state) -> np.array:
+def state_to_features(game_state) -> np.array:
     # This is a function that converts the game state to the input of your model
     
     # General information
-    self.positions = game_state['self'][3]
+    self_pos = game_state['self'][3]
     free = game_state['field'] == 0
     crates = game_state['field'] == 1
     bombs = game_state['bombs']
@@ -66,19 +66,19 @@ def state_to_features(self, game_state) -> np.array:
     # Features 1.1. determine which corner the agent is in: left top, right top, left bottom, right bottom
     
     if game_state['step'] == 0:
-        if self.positions == (1,1): # left top
-            self.corner = 0
-        elif self.positions == (1,s.ROWS-2): # right top
-            self.corner = 1
-        elif self.positions == (s.COLS-2,1): # left bottom
-            self.corner = 2
-        elif self.positions == (s.COLS-2,s.ROWS-2): # right bottom
-            self.corner = 3
+        if self_pos == (1,1): # left top
+            self_corner = 0
+        elif self_pos == (1,s.ROWS-2): # right top
+            self_corner = 1
+        elif self_pos == (s.COLS-2,1): # left bottom
+            self_corner = 2
+        elif self_pos == (s.COLS-2,s.ROWS-2): # right bottom
+            self_corner = 3
     
     # Features 1.2. determine the direction feasibility
-    candidate_position = [(self.positions[0], self.positions[1]-1), (self.positions[0], self.positions[1]+1), 
-                          (self.positions[0]-1, self.positions[1]), (self.positions[0]+1, self.positions[1]), 
-                          self.positions]
+    candidate_position = [(self_pos[0], self_pos[1]-1), (self_pos[0], self_pos[1]+1), 
+                          (self_pos[0]-1, self_pos[1]), (self_pos[0]+1, self_pos[1]), 
+                          self_pos]
     valid_position = []
     for pos in candidate_position:
         if ((free[pos] and crates[pos] == 0) and 
@@ -87,14 +87,14 @@ def state_to_features(self, game_state) -> np.array:
                 (pos not in game_state['others']) and 
                 (pos not in game_state['bombs'])):
             valid_position.append(pos)
-    up_feasible = [self.positions[0], self.positions[1]-1] in valid_position
-    down_feasible = [self.positions[0], self.positions[1]+1] in valid_position
-    left_feasible = [self.positions[0]-1, self.positions[1]] in valid_position
-    right_feasible = [self.positions[0]+1, self.positions[1]] in valid_position
-    wait_feasible = self.positions in valid_position
+    up_feasible = [self_pos[0], self_pos[1]-1] in valid_position
+    down_feasible = [self_pos[0], self_pos[1]+1] in valid_position
+    left_feasible = [self_pos[0]-1, self_pos[1]] in valid_position
+    right_feasible = [self_pos[0]+1, self_pos[1]] in valid_position
+    wait_feasible = self_pos in valid_position
     
     # Features 1.3. bomb left
-    bomb_left = game_state['self'][2] > 0 and self.positions not in self.bomb_history
+    bomb_left = game_state['self'][2] > 0 and self_pos not in self.bomb_history
     
     
     # 2. Pathfinding features: coins nearby, crates nearby
@@ -105,14 +105,14 @@ def state_to_features(self, game_state) -> np.array:
     left_coins_score = 0
     right_coins_score = 0
     for (xc, yc) in coins:
-        if yc > self.positions[1]:
-            up_coins_score += 1/(yc-self.positions[1])
-        elif yc < self.positions[1]:
-            down_coins_score += 1/(self.positions[1]-yc)
-        if xc > self.positions[0]:
-            right_coins_score += 1/(xc-self.positions[0])
-        elif xc < self.positions[0]:
-            left_coins_score += 1/(self.positions[0]-xc)
+        if yc > self_pos[1]:
+            up_coins_score += 1/(yc-self_pos[1])
+        elif yc < self_pos[1]:
+            down_coins_score += 1/(self_pos[1]-yc)
+        if xc > self_pos[0]:
+            right_coins_score += 1/(xc-self_pos[0])
+        elif xc < self_pos[0]:
+            left_coins_score += 1/(self_pos[0]-xc)
     
     # Features 2.2. determine the distance to the nearest crate
     up_crates_score = 0
@@ -120,26 +120,26 @@ def state_to_features(self, game_state) -> np.array:
     left_crates_score = 0
     right_crates_score = 0
     for (xc, yc) in crates:
-        if yc > self.positions[1]:
-            up_crates_score += 1/(yc-self.positions[1])
-        elif yc < self.positions[1]:
-            down_crates_score += 1/(self.positions[1]-yc)
-        if xc > self.positions[0]:
-            right_crates_score += 1/(xc-self.positions[0])
-        elif xc < self.positions[0]:
-            left_crates_score += 1/(self.positions[0]-xc)
+        if yc > self_pos[1]:
+            up_crates_score += 1/(yc-self_pos[1])
+        elif yc < self_pos[1]:
+            down_crates_score += 1/(self_pos[1]-yc)
+        if xc > self_pos[0]:
+            right_crates_score += 1/(xc-self_pos[0])
+        elif xc < self_pos[0]:
+            left_crates_score += 1/(self_pos[0]-xc)
         
     
     # 3. Life-saving features: bomb nearby, explosion nearby
     # Features 3.1. determine the distance to the nearest bomb
     
     for (xb, yb), t in bombs:
-        if xb == self.positions[0] and abs(yb-self.positions[1]) < 4:
-            up_bomb_nearby = yb >= self.positions[1]
-            down_bomb_nearby = yb <= self.positions[1]
-        if yb == self.positions[1] and abs(xb-self.positions[0]) < 4:
-            left_bomb_nearby = xb >= self.positions[0]
-            right_bomb_nearby = xb <= self.positions[0]
+        if xb == self_pos[0] and abs(yb-self_pos[1]) < 4:
+            up_bomb_nearby = yb >= self_pos[1]
+            down_bomb_nearby = yb <= self_pos[1]
+        if yb == self_pos[1] and abs(xb-self_pos[0]) < 4:
+            left_bomb_nearby = xb >= self_pos[0]
+            right_bomb_nearby = xb <= self_pos[0]
     
     # merge all features
     features = np.array([up_feasible, down_feasible, left_feasible, right_feasible, wait_feasible, bomb_left,

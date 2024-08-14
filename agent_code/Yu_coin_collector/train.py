@@ -3,7 +3,7 @@ import random
 import events as e
 import settings as s
 import logging
-from policynet import PolicyNet
+# from .policynet import Policy
 import torch
 import torch.nn as nn
 
@@ -27,9 +27,6 @@ def setup_training(self):
     self.gamma = 0.95
     self.visited_history = deque([], 20)
     self.episode = 0
-    
-    self.loss_fn = nn.MSELoss()
-    self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=0.001)
     
     self.logger = logging.getLogger(__name__)
     
