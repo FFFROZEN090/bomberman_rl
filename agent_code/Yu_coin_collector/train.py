@@ -3,7 +3,7 @@ import random
 import events as e
 import settings as s
 import logging
-# from .policynet import Policy
+# from policynet import PolicyNet
 import torch
 import torch.nn as nn
 
@@ -24,7 +24,6 @@ LOOP_DETECTED = 'LOOP_DETECTED'
 
 
 def setup_training(self):
-    self.gamma = 0.95
     self.visited_history = deque([], 20)
     self.episode = 0
     
@@ -77,35 +76,35 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             if (0 < i < crates.shape[0]) and (0 < j < crates.shape[1]) and crates[i, j] and bombs_time[i, j] == 5:
                 events.append(BOMB_DROPPED_FOR_CRATE)
                 
-def reset_params(self):
+    
+    #self.logger.info(f'Events: ',{" ,"}.join([event for event in events]))
+    self.logger.info(f'Events: {events}')
+    self.model.rewards.append(reward_from_events(events))
+                    
+    
+
+def end_of_round(self, last_game_state, last_action, events): 
+    # record the last game state info
+    self.model.rewards.append(reward_from_events(events))
+    self.model.scores.append(last_game_state['self'][1])
+    
+    # update the model
+    self.model.train()
+    
+    # reset the parameters for the next round
     self.visited_history = deque([], 20)
-    self.episode += 1
+    self.model.episode += 1
     
     self.model.rewards = []
     self.model.action_probs = []
-    
-
-def end_of_round(self, last_game_state, last_action, events):
-    # last step of the round, calculate the reward and update the model
-    reward = self.reward_from_events(events)
-    self.model.rewards.append(reward)
-    self.model.scores.append(last_game_state['self'][1])
-    self.model.action_probs.append(self.policy_net.get_action_probs(last_game_state))
-    
-    # update the model
-    self.train()
-    
-    # reset the parameters for the next round
-    self.reset_params()
-    
-    self.model.episode += 1
+    self.model.game_state_history = []
     
     # Save model for every 200 episodes
     if self.model.episode % 200 == 0:
         self.model.save()
         
 
-def reward_from_events(self, events) -> float:
+def reward_from_events(events) -> float:
     reward = 0
     game_rewards = {
         e.INVALID_ACTION: -0.05,
@@ -129,11 +128,15 @@ def reward_from_events(self, events) -> float:
         BOMB_TIME2: -0.3,
         BOMB_TIME1: -0.5,
         EXCAPE_FROM_BOMB: 0.5,
+        e.BOMB_EXPLODED: 0,
+        
+        BOMB_DROPPED_FOR_CRATE: 0.02,
         
         e.KILLED_OPPONENT: 5,
+        e.GOT_KILLED: -10,
         e.KILLED_SELF: -10,
         e.SURVIVED_ROUND: 5
     }
     reward = sum([game_rewards[event] for event in events])
-    self.logger.info(f"Awarded {reward} for events {' ,'.join(events)}")
+    
     return reward

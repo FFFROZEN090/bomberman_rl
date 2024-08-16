@@ -16,6 +16,7 @@ class Policy(nn.Module):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=1e-2)
         
         # Episode information
+        self.game_state_history = []
         self.action_probs = []
         self.rewards = []
         
@@ -58,37 +59,55 @@ class Policy(nn.Module):
         
     def forward(self, features):
         x = F.relu(self.fc1(features))
-        x = F.softmax(self.fc2(x), dim=1)
-        self.action_probs.append(x)
+        x = F.softmax(self.fc2(x), dim=0)
+        if torch.isnan(x).any():
+            print('Action probabilities contain NaN values')
+            print('Features:', features)
+            print('Network output:', x)
+            x = torch.tensor([0.23, 0.23, 0.23, 0.23, 0.08, 0])
         return x
       
-    
-    def loss(self):
+        
+    def train(self):
+        loss_values = []
+        print('The length of game state history is:', len(self.game_state_history))
+        print('The length of action probs is:', len(self.action_probs))
+        print('The length of rewards is:', len(self.rewards))
         discounted_rewards = []
-        for t in range(len(self.rewards)):
+        for t in range(1, len(self.rewards)):
+            loss = 0
             Gt = 0
             pw = 0
             for r in self.rewards[t:]:
                 Gt += self.gamma**pw * r
                 pw += 1
+            
             discounted_rewards.append(Gt)
+
+            #loss += -torch.log(self.action_probs[t]) * Gt
+            # update the action probabilities for each step
+            for i in range(t):
+                self.action_probs[i] = self.forward(self.game_state_history[i])
+                # calculate the loss
+                log_prob = torch.log(self.action_probs[i])
+                loss += -log_prob * Gt
+            loss = sum(loss)/len(loss)
+            
+            # update the model
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+            loss_values.append(loss)
+        
         discounted_rewards = torch.tensor(discounted_rewards)
         discounted_rewards = (discounted_rewards - discounted_rewards.mean()) / (discounted_rewards.std() + 1e-9)
         
-        loss = 0
-        for log_prob, Gt in zip(self.action_probs, discounted_rewards):
-            loss += -log_prob * Gt
-        self.loss_values.append(loss)
-        return loss
-        
-    def train(self):
-        self.optimizer.zero_grad()
-        loss = self.loss()
-        loss.backward()
-        self.optimizer.step()
-        self.rewards = []
-        self.action_probs = []
-        return loss.item()
+        # save the final rewards and discounted rewards
+        self.final_rewards.append(sum(self.rewards))
+        self.final_discounted_rewards.append(sum(discounted_rewards))
+        self.loss_values.append(sum(loss_values)/len(loss_values))
+            
+            
         
         
       
