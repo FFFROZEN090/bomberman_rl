@@ -14,6 +14,9 @@ if [[ "$(uname)" == "Darwin" ]]; then
     # macOS might require additional settings for X11, e.g., using XQuartz
     display_var="host.docker.internal:0"
 
+    # Execute xhost
+    xhost +
+
 elif [[ "$(uname -s)" == "Linux" ]]; then
     # Linux specific settings
     dir="/home/jli/bomberman_rl/"
