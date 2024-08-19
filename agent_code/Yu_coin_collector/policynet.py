@@ -52,6 +52,10 @@ class BasePolicy(nn.Module):
         
         torch.save(checkpoint, os.path.join("Saves/", self.checkpoint_dir, f"{self.name}_{self.episode}.pt"))
     
+    # TODO: epsilon decay function
+    def Epsilon_decay(self):
+        pass
+    
     def load(self, path = None):
         if path is None:
             print('No checkpoint path is given.')
@@ -73,6 +77,11 @@ class BasePolicy(nn.Module):
 
     def train(self):
         raise NotImplementedError("Subclasses should implement this!")
+    
+    # TODO: visualizations
+    def visualize(self):
+        pass
+
 
 # Simple feedforward policy
 class FFPolicy(BasePolicy):

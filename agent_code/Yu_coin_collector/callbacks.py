@@ -12,12 +12,14 @@ from .policynet import *
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 MODEL_NAME = 'coin1'
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '.pt')
+LAST_EPISODE = 1800
+MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_' + str(LAST_EPISODE) + '.pt')
 
 def setup(self):
     np.random.seed()
     self.logger.info('Successfully entered setup code')
-    self.model = FFPolicy(feature_dim=22, action_dim=6, hidden_dim=128, episode=0, gamma=0.99, epsilon=0.1, model_name='coin1')
+    # TODO: Choose a model architecture and hyperparameters according to the arugments passed to the agent
+    self.model = FFPolicy(feature_dim=22, action_dim=6, hidden_dim=128, episode=0, gamma=0.99, epsilon=0.1, model_name=MODEL_NAME)
     
     # Create a game state history for the agent
     # self.opponent_history = deque([], 5) # save the last 5 actions of the opponents
