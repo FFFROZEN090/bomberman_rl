@@ -21,9 +21,12 @@ sdist/
 var/
 wheels/
 *.egg-info/
+References_for_bombman/
+References/
 .installed.cfg
 *.egg
 MANIFEST
+checkpoints/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
