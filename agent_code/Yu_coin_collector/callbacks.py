@@ -7,16 +7,17 @@ import os
 import torch
 import torch.nn as nn
 
-from .policynet import Policy
+from .policynet import *
 
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
-MODELNAME = 'my-saved-model.pt'
+MODEL_NAME = 'coin1'
+MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '.pt')
 
 def setup(self):
     np.random.seed()
     self.logger.info('Successfully entered setup code')
-    self.model = Policy(feature_dim=22, action_dim=6, hidden_dim=128, episode=0, gamma=0.99, epsilon=0.1, model_name='coin1')
+    self.model = FFPolicy(feature_dim=22, action_dim=6, hidden_dim=128, episode=0, gamma=0.99, epsilon=0.1, model_name='coin1')
     
     # Create a game state history for the agent
     # self.opponent_history = deque([], 5) # save the last 5 actions of the opponents
@@ -25,10 +26,10 @@ def setup(self):
     
     if self.train:
         self.logger.info('Loading model')
-        self.model.load(MODELNAME)
+        self.model.load(MODEL_PATH)
         self.logger.info('Model for training loaded')
     else:
-        self.model.load(MODELNAME)
+        self.model.load(MODEL_PATH)
         self.model.eval()
         self.model.requires_grad_(False)
         self.logger.info('Model for evaluation loaded')
@@ -40,7 +41,7 @@ def act(self, game_state) -> str:
     game_state_features = state_to_features(game_state)
     self.model.game_state_history.append(game_state_features)
     
-    action_probs = self.model.forward(game_state_features)
+    action_probs = nn.functional.softmax(self.model.forward(game_state_features), dim=0)
     self.model.action_probs.append(action_probs)
     
     if self.train and np.random.rand() < self.model.epsilon:

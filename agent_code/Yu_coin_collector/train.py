@@ -27,7 +27,6 @@ def setup_training(self):
     self.visited_history = deque([], 20)
     self.episode = 0
     
-    self.logger = logging.getLogger(__name__)
     
     
     
@@ -46,7 +45,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     for coin_pos in coins_pos:
         if np.linalg.norm(np.array(coin_pos) - np.array(new_game_state['self'][3])) < 4: # falls into the coin range
             events.append(COIN_CLOSE)
-            if np.linalg.norm(np.array(coin_pos) - np.array(new_game_state['self'][3])) < np.linalg.norm(np.array(coins_pos[0]) - np.array(old_game_state['self'][3])):
+            if np.linalg.norm(np.array(coin_pos) - np.array(new_game_state['self'][3])) < np.linalg.norm(np.array(coin_pos) - np.array(old_game_state['self'][3])):
                 events.append(COIN_CLOSER)
     
     # distance to bombs: if still in danger zone, add an event to events list
@@ -87,6 +86,12 @@ def end_of_round(self, last_game_state, last_action, events):
     # record the last game state info
     self.model.rewards.append(reward_from_events(events))
     self.model.scores.append(last_game_state['self'][1])
+    
+    # log the game info
+    self.logger.info(f'Episode {self.model.episode} ended with score {last_game_state["self"][1]}')
+    self.logger.info(f'Events: {events}')
+    self.logger.info(f'Rewards: {self.model.final_rewards[-1]}')
+    self.logger.info(f'Scores: {self.model.scores[-1]}')
     
     # update the model
     self.model.train()
