@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import os
-
+import wandb
+#TODO: Visualize the training process by wandb
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 
 # General policy class
@@ -51,9 +52,12 @@ class BasePolicy(nn.Module):
         }
         
         torch.save(checkpoint, os.path.join("Saves/", self.checkpoint_dir, f"{self.name}_{self.episode}.pt"))
+
+        # Upload the model to wandb
+        wandb.save(os.path.join("Saves/", self.checkpoint_dir, f"{self.name}_{self.episode}.pt"))
     
     # TODO: epsilon decay function
-    def Epsilon_decay(self):
+    def Epsilon_decay(self, decay):
         pass
     
     def load(self, path = None):
@@ -90,6 +94,20 @@ class FFPolicy(BasePolicy):
         self.fc1 = nn.Linear(feature_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, action_dim)
         self.init_optimizer()
+
+        # Initialize wandb
+        wandb.init(
+            project="MLE_Bomberman",
+            config={
+                "architecture": "FFPolicy",
+                "feature_dim": feature_dim,
+                "action_dim": action_dim,
+                "hidden_dim": hidden_dim,
+                "learning_rate": self.lr,
+                "gamma": self.gamma,
+                "epsilon": self.epsilon
+            }
+        )
 
 
     def forward(self, features):
@@ -131,6 +149,15 @@ class FFPolicy(BasePolicy):
         self.final_discounted_rewards.append(sum(discounted_rewards))
         self.loss_values.append(sum(loss_values)/len(loss_values))
 
+        # Log metrics to wandb
+        wandb.log({
+            "episode": self.episode,
+            "loss": self.loss_values[-1],
+            "reward": self.final_rewards[-1],
+            "discounted_reward": self.final_discounted_rewards[-1],
+            "epsilon": self.epsilon
+        })
+
 # LSTM policy
 class LSTMPolicy(BasePolicy):
     def __init__(self, feature_dim, action_dim=len(ACTIONS), hidden_dim=128, lstm_layers=1, **kwargs):
@@ -138,6 +165,21 @@ class LSTMPolicy(BasePolicy):
         self.lstm = nn.LSTM(feature_dim, hidden_dim, lstm_layers, batch_first=True)
         self.fc = nn.Linear(hidden_dim, action_dim)
         self.init_optimizer()
+
+        # Initialize wandb
+        wandb.init(
+            project="MLE_Bomberman",
+            config={
+                "architecture": "LSTMPolicy",
+                "feature_dim": feature_dim,
+                "action_dim": action_dim,
+                "hidden_dim": hidden_dim,
+                "lstm_layers": lstm_layers,
+                "learning_rate": self.lr,
+                "gamma": self.gamma,
+                "epsilon": self.epsilon
+            }
+        )
 
 
     def forward(self, features, hidden=None):
@@ -177,6 +219,9 @@ class LSTMPolicy(BasePolicy):
         self.final_discounted_rewards.append(sum(discounted_rewards))
         self.loss_values.append(sum(loss_values) / len(loss_values))
 
+        # Log metrics to wandb
+        
+
 # Actor-Critic Proximal policy
 class PPOPolicy(BasePolicy):
     def __init__(self, feature_dim, action_dim=len(ACTIONS), hidden_dim=128, clip_epsilon=0.2, **kwargs):
@@ -194,6 +239,20 @@ class PPOPolicy(BasePolicy):
         self.clip_epsilon = clip_epsilon
         self.init_optimizer()
 
+        # Initialize wandb
+        wandb.init(
+            project="MLE_Bomberman",
+            config={
+                "architecture": "PPOPolicy",
+                "feature_dim": feature_dim,
+                "action_dim": action_dim,
+                "hidden_dim": hidden_dim,
+                "clip_epsilon": clip_epsilon,
+                "learning_rate": self.lr,
+                "gamma": self.gamma,
+                "epsilon": self.epsilon
+            }
+        )
 
     def forward(self, features):
         return F.softmax(self.actor(features), dim=0)
@@ -202,5 +261,5 @@ class PPOPolicy(BasePolicy):
         return self.critic(features)
 
     def train(self):
-        # Implement PPO-specific training logic here
+        # TODO: Implement PPO-specific training logic here
         pass

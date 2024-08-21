@@ -11,6 +11,9 @@ from collections import deque
 
 from typing import List
 
+import wandb
+
+
 # events
 COIN_CLOSE = 'COIN_CLOSE'
 COIN_CLOSER = 'COIN_CLOSER'
@@ -26,7 +29,6 @@ LOOP_DETECTED = 'LOOP_DETECTED'
 def setup_training(self):
     self.visited_history = deque([], 20)
     self.episode = 0
-    
     
     
     
@@ -93,7 +95,7 @@ def end_of_round(self, last_game_state, last_action, events):
     self.logger.info(f'Rewards: {self.model.final_rewards[-1]}')
     self.logger.info(f'Scores: {self.model.scores[-1]}')
     
-    # update the model
+    # update the model parameters
     self.model.train()
     
     # reset the parameters for the next round
@@ -107,7 +109,7 @@ def end_of_round(self, last_game_state, last_action, events):
     # Save model for every 200 episodes
     if self.model.episode % 200 == 0:
         self.model.save()
-        
+
 
 def reward_from_events(events) -> float:
     reward = 0
@@ -145,3 +147,5 @@ def reward_from_events(events) -> float:
     reward = sum([game_rewards[event] for event in events])
     
     return reward
+
+    
