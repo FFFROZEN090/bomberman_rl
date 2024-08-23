@@ -116,3 +116,5 @@ replays/
 results/
 
 .DS_Store
+
+*.npy
