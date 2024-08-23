@@ -89,7 +89,7 @@ class GenericWorld:
 
         for agent in self.active_agents:
             agent.start_round()
-
+        # TODO: Add extra replay to document frame-wise status
         self.replay = {
             'round': new_round,
             'arena': np.array(self.arena),
