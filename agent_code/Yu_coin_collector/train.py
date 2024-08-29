@@ -29,6 +29,25 @@ LOOP_DETECTED = 'LOOP_DETECTED'
 def setup_training(self):
     self.visited_history = deque([], 20)
     self.episode = 0
+
+    # Compose events as config
+    
+    # Initialize wandb
+    wandb.init(
+        project="bomberman_rl",
+        entity="your-entity-name",  # Replace with your wandb username or team name
+        config={
+            "model": "FFPolicy",
+            "learning_rate": self.model.optimizer.param_groups[0]['lr'],
+            "gamma": self.model.gamma,
+            "epsilon": self.model.epsilon,
+            "hidden_dim": self.model.hidden_dim,
+        }
+    )
+
+    # Log model architecture
+    wandb.watch(self.model)
+    
     
     
     
@@ -148,4 +167,32 @@ def reward_from_events(events) -> float:
     
     return reward
 
+
+if __name__ == '__main__':
+    print('Training the agent...')
+
+    # Initialize wandb
+    wandb.init(project="MLE_Bomberman", name="991211lja")
+
+    # Configure wandb to log hyperparameters and metrics
+    wandb.config.update({
+        "model_name": MODEL_NAME,
+        "feature_dim": 22,
+        "action_dim": 6,
+        "hidden_dim": 128,
+        "gamma": 0.99,
+        "epsilon": 0.1
+    })
+
+    # Log metrics during training
+    def log_metrics(episode, reward, loss):
+        wandb.log({
+            "episode": episode,
+            "reward": reward,
+            "loss": loss,
+            "score": score,
+            "events": events
+        })
+
+    # Make sure to call log_metrics() after each episode in your training loop
     

@@ -13,6 +13,10 @@ from typing import List
 
 import wandb
 
+from .DQN_network import ExperienceDataset, ReplayBuffer
+from .DQN_datatype import Experience
+from .DQN_utils import get_state
+
 
 # events
 COIN_CLOSE = 'COIN_CLOSE'
@@ -24,19 +28,45 @@ BOMB_TIME4 = 'BOMB_TIME4' # 4 steps to explode
 BOMB_DROPPED_FOR_CRATE = 'BOMB_DROPPED_FOR_CRATE' # Crates will be destroyed by the dropped bomb
 EXCAPE_FROM_BOMB = 'EXCAPE_FROM_BOMB'
 LOOP_DETECTED = 'LOOP_DETECTED'
+ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 
 # TODO: Setup model and experience structure for DQN
 def setup_training(self):
     self.visited_history = deque([], 20)
     self.episode = 0
-    
-    
-    
+
 
 # TODO: On game event, update the model, reward, experience
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[dict]) -> None:
     self.logger.debug(f'Encountered game event(s) {", ".join([event for event in events])}')
     
+    events = calculate_events(self, old_game_state, self_action, new_game_state, events)
+
+    # Get DQN state
+    state = get_state(self, old_game_state, self_action, new_game_state)
+
+    # Get old state
+    old_state = get_state(self, old_game_state, self_action, new_game_state)
+
+    # Get reward
+    reward = reward_from_events(events)
+
+    # Get Action number
+    action_number = ACTIONS.index(self_action)
+
+    # If self.last_reward is not None, then store the experience
+    if self.last_reward is not None:
+        self.experience_buffer.append(Experience(old_state, action_number, reward, state, done))
+
+    # Update last reward
+    self.last_reward = reward
+
+    self.logger.info(f'Events: {events}')
+
+    if len(self.experience_buffer) > self.batch_size:
+        self.model.train()
+
+def calculate_events(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[dict]) -> List[dict]:
     # add position to visited history
     self.visited_history.append(new_game_state['self'][3])
     # check if the agent is in a loop, if so, add an event to events list
@@ -77,11 +107,8 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         for (i, j) in [(new_game_state['self'][3][0] + h, new_game_state['self'][3][1]) for h in range(-3, 4)] + [(new_game_state['self'][3][0], new_game_state['self'][3][1] + h) for h in range(-3, 4)]:
             if (0 < i < crates.shape[0]) and (0 < j < crates.shape[1]) and crates[i, j] and bombs_time[i, j] == 5:
                 events.append(BOMB_DROPPED_FOR_CRATE)
-                
     
-    #self.logger.info(f'Events: ',{" ,"}.join([event for event in events]))
-    self.logger.info(f'Events: {events}')
-    self.model.rewards.append(reward_from_events(events))
+    return events
                     
     
 
