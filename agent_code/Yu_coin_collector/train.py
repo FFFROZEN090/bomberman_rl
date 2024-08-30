@@ -1,11 +1,6 @@
 import numpy as np
-import random
 import events as e
 import settings as s
-import logging
-# from policynet import PolicyNet
-import torch
-import torch.nn as nn
 
 from collections import deque
 
@@ -108,14 +103,14 @@ def end_of_round(self, last_game_state, last_action, events):
     self.model.rewards.append(reward_from_events(events))
     self.model.scores.append(last_game_state['self'][1])
     
+    # update the model parameters
+    self.model.train()
+    
     # log the game info
     self.logger.info(f'Episode {self.model.episode} ended with score {last_game_state["self"][1]}')
     self.logger.info(f'Events: {events}')
     self.logger.info(f'Rewards: {self.model.final_rewards[-1]}')
     self.logger.info(f'Scores: {self.model.scores[-1]}')
-    
-    # update the model parameters
-    self.model.train()
     
     # reset the parameters for the next round
     self.visited_history = deque([], 20)
@@ -123,6 +118,7 @@ def end_of_round(self, last_game_state, last_action, events):
     
     self.model.rewards = []
     self.model.action_probs = []
+    self.model.actions = []
     self.model.game_state_history = []
     
     # Save model for every 200 episodes

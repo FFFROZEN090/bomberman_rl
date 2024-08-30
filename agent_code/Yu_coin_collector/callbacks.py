@@ -7,19 +7,19 @@ import os
 import torch
 import torch.nn as nn
 
-from .policynet import *
+from .policy_model import *
 
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 MODEL_NAME = 'coin1'
-LAST_EPISODE = 1800
+LAST_EPISODE = 0
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_' + str(LAST_EPISODE) + '.pt')
 
 def setup(self):
     np.random.seed()
     self.logger.info('Successfully entered setup code')
     # TODO: Choose a model architecture and hyperparameters according to the arugments passed to the agent
-    self.model = FFPolicy(feature_dim=22, action_dim=6, hidden_dim=128, episode=0, gamma=0.99, epsilon=0.1, model_name=MODEL_NAME)
+    self.model = FFPolicy(feature_dim=22, action_dim=6, hidden_dim=128, episode=0, gamma=0.99, model_name=MODEL_NAME)
     
     # Create a game state history for the agent
     # self.opponent_history = deque([], 5) # save the last 5 actions of the opponents
@@ -46,13 +46,17 @@ def act(self, game_state) -> str:
     action_probs = nn.functional.softmax(self.model.forward(game_state_features), dim=0)
     self.model.action_probs.append(action_probs)
     
-    if self.train and np.random.rand() < self.model.epsilon:
-        # explore step: act like a random agent
-        action = np.random.choice(['RIGHT', 'LEFT', 'UP', 'DOWN', 'BOMB'], p=[.23, .23, .23, .23, .08])
+    action_probs = action_probs.detach().numpy()
+    
+    if np.isnan(action_probs).any():
+        self.logger.info('Action probabilities contain NaN values')
+        action = np.random.choice(['RIGHT', 'LEFT', 'UP', 'DOWN', 'BOMB'], p=[0.23, 0.23, 0.23, 0.23, 0.08])
+        
     else:
-        # exploit step: act like a trained agent
-        action_probs = action_probs.detach().numpy()
         action = np.random.choice(ACTIONS, p=action_probs)
+    
+    # record the action index
+    self.model.actions.append(ACTIONS.index(action))
         
     return action
 

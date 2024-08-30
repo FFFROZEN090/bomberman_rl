@@ -3,96 +3,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 import os
 import wandb
+from .policy_utils import BasePolicy
+
 #TODO: Visualize the training process by wandb
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
-
-# General policy class
-class BasePolicy(nn.Module):
-    def __init__(self, feature_dim, action_dim=len(ACTIONS), hidden_dim=128, episode=0,
-                 gamma=0.99, epsilon=0.1, model_name=''):
-        super(BasePolicy, self).__init__()
-        self.feature_dim = feature_dim
-        self.action_dim = action_dim
-        self.hidden_dim = hidden_dim
-        
-        # Episode information
-        self.game_state_history = []
-        self.action_probs = []
-        self.rewards = []
-        
-        # parameters for saving and loading the model
-        self.checkpoint_dir = os.path.join(os.getcwd(), 'checkpoints')
-        self.name = model_name
-        self.episode = episode
-        self.gamma = gamma
-        self.epsilon = epsilon
-        self.loss_values = []
-        self.final_rewards = []
-        self.final_discounted_rewards = []
-        self.scores = []
-        
-    def init_optimizer(self, lr=0.01):
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
-    
-    def forward(self, features):
-        raise NotImplementedError("Subclasses should implement this!")
-
-    def save(self):
-        checkpoint = {
-            'episode': self.episode,
-            'model_name': self.name,
-            'gamma': self.gamma,
-            'epsilon': self.epsilon,
-            'loss_values': self.loss_values,
-            'final_rewards': self.final_rewards,
-            'final_discounted_rewards': self.final_discounted_rewards,
-            'scores': self.scores,
-            'model_state_dict': self.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict()
-        }
-        
-        torch.save(checkpoint, os.path.join("Saves/", self.checkpoint_dir, f"{self.name}_{self.episode}.pt"))
-
-        # Upload the model to wandb
-        wandb.save(os.path.join("Saves/", self.checkpoint_dir, f"{self.name}_{self.episode}.pt"))
-    
-    # TODO: epsilon decay function
-    def Epsilon_decay(self, decay):
-        pass
-    
-    def load(self, path = None):
-        if path is None:
-            print('No checkpoint path is given.')
-        elif os.path.isfile(path):
-            checkpoint = torch.load(path)
-            self.load_state_dict(checkpoint['model_state_dict'])
-            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            self.episode = checkpoint['episode']
-            self.name = checkpoint['model_name']
-            self.gamma = checkpoint['gamma']
-            self.epsilon = checkpoint['epsilon']
-            self.loss_values = checkpoint['loss_values']
-            self.final_rewards = checkpoint['final_rewards']
-            self.final_discounted_rewards = checkpoint['final_discounted_rewards']
-            self.scores = checkpoint['scores']
-            print('Model loaded from', path)
-        else:
-            print('No model found at', path)
-
-    def train(self):
-        raise NotImplementedError("Subclasses should implement this!")
-    
-    # TODO: visualizations
-    def visualize(self):
-        pass
 
 
 # Simple feedforward policy
 class FFPolicy(BasePolicy):
-    def __init__(self, feature_dim, action_dim=len(ACTIONS), hidden_dim=128, **kwargs):
+    def __init__(self, feature_dim, action_dim=len(ACTIONS), hidden_dim=128, n_layers=1, **kwargs):
         super(FFPolicy, self).__init__(feature_dim, action_dim, hidden_dim, **kwargs)
         self.fc1 = nn.Linear(feature_dim, hidden_dim)
+        self.fc = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers-1)])
         self.fc2 = nn.Linear(hidden_dim, action_dim)
+        
         self.init_optimizer()
 
         # Initialize wandb
@@ -100,50 +24,66 @@ class FFPolicy(BasePolicy):
             project="MLE_Bomberman",
             config={
                 "architecture": "FFPolicy",
-                "feature_dim": feature_dim,
-                "action_dim": action_dim,
-                "hidden_dim": hidden_dim,
+                "feature_dim": self.feature_dim,
+                "action_dim": self.action_dim,
+                "hidden_dim": self.hidden_dim,
+                "n_layers": self.n_layers,
                 "learning_rate": self.lr,
-                "gamma": self.gamma,
-                "epsilon": self.epsilon
+                "gamma": self.gamma
             }
         )
 
 
     def forward(self, features):
+        # Add a leaky ReLU activation function
         x = F.relu(self.fc1(features))
         # don't use softmax here, since we want to output real numbers
+        for layer in self.fc:
+            x = F.relu(layer(x))
         x = self.fc2(x)
         return x
 
     def train(self):
         loss_values = []
         
+        # # check the length of the rewards
+        # print('Length of rewards:', len(self.rewards))
+        # print('Length of actions:', len(self.actions))
+        # print('Length of game_state_history:', len(self.game_state_history))
+        # print('Length of action_probs:', len(self.action_probs))
+        
         # Calculate discounted rewards
         discounted_rewards = []
-        for t in range(1, len(self.rewards)):
-            loss = 0
-            Gt = 0
-            pw = 0
-            for r in self.rewards[t:]:
-                Gt += self.gamma**pw * r
-                pw += 1
+        
+        R = 0 
+        for r in reversed(self.rewards):
+            R = r + self.gamma * R
+            discounted_rewards.insert(0, R)
+        
+        discounted_rewards = torch.tensor(discounted_rewards)
+        discounted_rewards = (discounted_rewards - discounted_rewards.mean()) / (discounted_rewards.std() + 1e-9)
+        
+        # Training loop for each step
+        if len(self.rewards) == len(self.actions) == len(self.game_state_history) == len(self.action_probs):
+            steps = len(self.rewards)
+        else:
+            steps = len(self.rewards)-1
             
-            discounted_rewards.append(Gt)
-
-            for i in range(t):
-                self.action_probs[i] = self.forward(self.game_state_history[i])
-                log_prob = torch.log(self.action_probs[i])
-                loss += -log_prob * Gt
-            loss = sum(loss)/len(loss)
+        for t in range(steps):
+            rewards = discounted_rewards[t:]
+            features = self.game_state_history[t]
+            action_prob = F.softmax(self.forward(features), dim=0)
+            log_prob = torch.log(action_prob + 1e-9)[self.actions[t]] # add a small epsilon to avoid log(0)
+            policy_loss = -log_prob * rewards
+            loss = policy_loss.sum()
+            
+            # Gradient clipping
+            torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
             
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
             loss_values.append(loss)
-        
-        discounted_rewards = torch.tensor(discounted_rewards)
-        discounted_rewards = (discounted_rewards - discounted_rewards.mean()) / (discounted_rewards.std() + 1e-9)
         
         self.final_rewards.append(sum(self.rewards))
         self.final_discounted_rewards.append(sum(discounted_rewards))
@@ -155,7 +95,7 @@ class FFPolicy(BasePolicy):
             "loss": self.loss_values[-1],
             "reward": self.final_rewards[-1],
             "discounted_reward": self.final_discounted_rewards[-1],
-            "epsilon": self.epsilon
+            "score": self.scores[-1]
         })
 
 # LSTM policy
@@ -176,8 +116,7 @@ class LSTMPolicy(BasePolicy):
                 "hidden_dim": hidden_dim,
                 "lstm_layers": lstm_layers,
                 "learning_rate": self.lr,
-                "gamma": self.gamma,
-                "epsilon": self.epsilon
+                "gamma": self.gamma
             }
         )
 
@@ -220,6 +159,13 @@ class LSTMPolicy(BasePolicy):
         self.loss_values.append(sum(loss_values) / len(loss_values))
 
         # Log metrics to wandb
+        wandb.log({
+            "episode": self.episode,
+            "loss": self.loss_values[-1],
+            "reward": self.final_rewards[-1],
+            "discounted_reward": self.final_discounted_rewards[-1],
+            "score": self.scores[-1]
+        })
         
 
 # Actor-Critic Proximal policy
@@ -249,8 +195,7 @@ class PPOPolicy(BasePolicy):
                 "hidden_dim": hidden_dim,
                 "clip_epsilon": clip_epsilon,
                 "learning_rate": self.lr,
-                "gamma": self.gamma,
-                "epsilon": self.epsilon
+                "gamma": self.gamma
             }
         )
 
