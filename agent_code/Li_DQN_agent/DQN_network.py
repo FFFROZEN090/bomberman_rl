@@ -57,7 +57,7 @@ class DQN(nn.Module):
             return torch.argmax(q_values).item()
 
 
-    def train(self, replay_buffer, batch_size，device='cpu'):
+    def train(self, replay_buffer, batch_size, device='cpu'):
         # Sample a batch of experiences from the replay buffer
         experiences = replay_buffer.sample(batch_size)
         

@@ -33,10 +33,11 @@ ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 # TODO: Setup model and experience structure for DQN
 def setup_training(self):
     self.visited_history = deque([], 20)
+    self.epoch = 0
     self.episode = 0
 
 
-# TODO: On game event, update the model, reward, experience
+# TODO: Verify the game event, update the model, reward, experience
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[dict]) -> None:
     self.logger.debug(f'Encountered game event(s) {", ".join([event for event in events])}')
     
@@ -56,6 +57,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
     # If self.last_reward is not None, then store the experience
     if self.last_reward is not None:
+        done = new_game_state['round'] == s.MAX_ROUNDS
         self.experience_buffer.append(Experience(old_state, action_number, reward, state, done))
 
     # Update last reward
@@ -65,6 +67,9 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
     if len(self.experience_buffer) > self.batch_size:
         self.model.train()
+
+        # Update the epoch
+        self.model.epoch += 1
 
 def calculate_events(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[dict]) -> List[dict]:
     # add position to visited history
@@ -112,32 +117,15 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
                     
     
 
-# TODO: Update the model score, train the model, save the model
+# TODO: Verify the end of the game, update the model, score, reward, and log the game info
 def end_of_round(self, last_game_state, last_action, events): 
     # record the last game state info
-    self.model.rewards.append(reward_from_events(events))
-    self.model.scores.append(last_game_state['self'][1])
+    self.last_game_state = last_game_state
     
-    # log the game info
-    self.logger.info(f'Episode {self.model.episode} ended with score {last_game_state["self"][1]}')
-    self.logger.info(f'Events: {events}')
-    self.logger.info(f'Rewards: {self.model.final_rewards[-1]}')
-    self.logger.info(f'Scores: {self.model.scores[-1]}')
-    
-    # update the model parameters
-    self.model.train()
-    
-    # reset the parameters for the next round
-    self.visited_history = deque([], 20)
-    self.model.episode += 1
-    
-    self.model.rewards = []
-    self.model.action_probs = []
-    self.model.game_state_history = []
-    
-    # Save model for every 200 episodes
-    if self.model.episode % 200 == 0:
-        self.model.save()
+    # Update the episode
+    self.episode += 1
+
+    pass
 
 
 def reward_from_events(events) -> float:

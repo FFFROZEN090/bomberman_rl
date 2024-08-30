@@ -10,6 +10,9 @@ from .DQN_network import DQN, ExperienceDataset, ReplayBuffer
 EXPERIENCE_BUFFER_SIZE = 1000000
 REPLAY_BUFFER_SIZE = 800
 
+MODEL_NAME = 'Li_DQN_agent'
+LAST_EPISODE = 100
+
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_' + str(LAST_EPISODE) + '.pt')
 
