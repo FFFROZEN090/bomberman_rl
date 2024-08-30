@@ -176,8 +176,7 @@ if __name__ == '__main__':
         "feature_dim": 22,
         "action_dim": 6,
         "hidden_dim": 128,
-        "gamma": 0.99,
-        "epsilon": 0.1
+        "gamma": 0.99
     })
 
     # Log metrics during training
