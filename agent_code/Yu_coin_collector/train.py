@@ -129,17 +129,11 @@ def end_of_round(self, last_game_state, last_action, events):
     self.logger.info(f'Rewards: {self.model.final_rewards[-1]}')
     self.logger.info(f'Scores: {self.model.scores[-1]}')
     
-    # reset the parameters for the next round
-    self.model.episode += 1
-    
-    self.model.rewards = []
-    self.model.action_probs = []
-    self.model.actions = []
-    self.model.game_state_history = []
-    
     # Save model for every 200 episodes
     if self.model.episode % 200 == 0:
         self.model.save()
+    
+    self.model.episode += 1
 
 
 def reward_from_events(events) -> float:
