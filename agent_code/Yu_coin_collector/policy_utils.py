@@ -9,12 +9,13 @@ ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 # General policy class
 class BasePolicy(nn.Module):
     def __init__(self, feature_dim, action_dim=len(ACTIONS), hidden_dim=128, n_layers=1, episode=0,
-                 gamma=0.99, model_name='', lr=0.001):
+                 gamma=0.99, model_name='', lr=0.001, WANDB=False):
         super(BasePolicy, self).__init__()
         self.feature_dim = feature_dim
         self.action_dim = action_dim
         self.hidden_dim = hidden_dim
         self.n_layers = n_layers
+        self.WANDB = WANDB
         
         # Episode information
         self.game_state_history = []

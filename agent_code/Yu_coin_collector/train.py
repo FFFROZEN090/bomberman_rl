@@ -7,8 +7,11 @@ from collections import deque
 from typing import List
 
 import wandb
+from .config import *
 
+from .rulebased_teacher import TeacherModel
 
+# Constants
 # events
 COIN_CLOSE = 'COIN_CLOSE'
 COIN_CLOSER = 'COIN_CLOSER'
@@ -19,29 +22,35 @@ BOMB_TIME4 = 'BOMB_TIME4' # 4 steps to explode
 BOMB_DROPPED_FOR_CRATE = 'BOMB_DROPPED_FOR_CRATE' # Crates will be destroyed by the dropped bomb
 EXCAPE_FROM_BOMB = 'EXCAPE_FROM_BOMB'
 LOOP_DETECTED = 'LOOP_DETECTED'
+NEW_CELL_FOUND = 'NEW_CELL_FOUND' # The agent found a new cell
 
 
 def setup_training(self):
     self.visited_history = deque([], 20)
+    self.coin_history = []
     self.episode = 0
+    
+    self.teacher = TeacherModel()
 
     # Compose events as config
     
-    # Initialize wandb
-    wandb.init(
-        project="bomberman_rl",
-        entity="your-entity-name",  # Replace with your wandb username or team name
-        config={
-            "model": "FFPolicy",
-            "learning_rate": self.model.optimizer.param_groups[0]['lr'],
-            "gamma": self.model.gamma,
-            "epsilon": self.model.epsilon,
-            "hidden_dim": self.model.hidden_dim,
-        }
-    )
+    if WANDB:
+        # Initialize wandb
+        wandb.init(
+            project="bomberman_rl",
+            entity="your-entity-name",  # Replace with your wandb username or team name
+            config={
+                "model": MODEL_NAME + '_' + MODEL_TYPE,
+                "learning_rate": self.model.optimizer.param_groups[0]['lr'],
+                "gamma": self.model.gamma,
+                "n_layers": self.model.n_layers,
+                "seq_len": self.model.seq_len,
+                "hidden_dim": self.model.hidden_dim,
+            }
+        )
 
-    # Log model architecture
-    wandb.watch(self.model)
+        # Log model architecture
+        wandb.watch(self.model)
     
     
     
@@ -50,17 +59,24 @@ def setup_training(self):
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[dict]) -> None:
     self.logger.debug(f'Encountered game event(s) {", ".join([event for event in events])}')
     
+    # Exploration reward: If the agent found a new cell, add an event to events list
+    if new_game_state['self'][3] not in self.visited_history:
+        events.append(NEW_CELL_FOUND)
+    
     # add position to visited history
     self.visited_history.append(new_game_state['self'][3])
     # check if the agent is in a loop, if so, add an event to events list
     if self.visited_history.count(new_game_state['self'][3]) > 2:
         events.append(LOOP_DETECTED)
     
-    # distance to coins: if getting close to coins, add an event to events list
+    # distance to coins: if getting close to coins at the first time, add an event to events list
     coins_pos = old_game_state['coins']
+    
     for coin_pos in coins_pos:
         if np.linalg.norm(np.array(coin_pos) - np.array(new_game_state['self'][3])) < 4: # falls into the coin range
-            events.append(COIN_CLOSE)
+            if coin_pos not in self.coin_history:
+                events.append(COIN_CLOSE)
+                self.coin_history.append(coin_pos)
             if np.linalg.norm(np.array(coin_pos) - np.array(new_game_state['self'][3])) < np.linalg.norm(np.array(coin_pos) - np.array(old_game_state['self'][3])):
                 events.append(COIN_CLOSER)
     
@@ -79,7 +95,8 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         events.append(BOMB_TIME3)
     elif bombs_time[new_game_state['self'][3]] == 4:
         events.append(BOMB_TIME4)
-        
+    
+    
     # If the agent was in danger zone but now safe, add an event to events list
     if bombs_time[old_game_state['self'][3]] < 5 and bombs_time[new_game_state['self'][3]] == 5:
         events.append('EXCAPE_FROM_BOMB')
@@ -113,7 +130,6 @@ def end_of_round(self, last_game_state, last_action, events):
     self.logger.info(f'Scores: {self.model.scores[-1]}')
     
     # reset the parameters for the next round
-    self.visited_history = deque([], 20)
     self.model.episode += 1
     
     self.model.rewards = []
@@ -129,7 +145,7 @@ def end_of_round(self, last_game_state, last_action, events):
 def reward_from_events(events) -> float:
     reward = 0
     game_rewards = {
-        e.INVALID_ACTION: -0.05,
+        e.INVALID_ACTION: -0.1,
         e.MOVED_LEFT: -0.01,
         e.MOVED_RIGHT: -0.01,
         e.MOVED_UP: -0.01,
@@ -141,9 +157,9 @@ def reward_from_events(events) -> float:
         
         e.CRATE_DESTROYED: 0.05,
         e.COIN_FOUND: 0.3,
-        COIN_CLOSE: 0.05,
-        COIN_CLOSER: 0.15,
-        e.COIN_COLLECTED: 1,
+        COIN_CLOSE: 0.03,
+        COIN_CLOSER: 0.25,
+        e.COIN_COLLECTED: 4,
         
         BOMB_TIME4: -0.1,
         BOMB_TIME3: -0.2,
@@ -152,11 +168,13 @@ def reward_from_events(events) -> float:
         EXCAPE_FROM_BOMB: 0.5,
         e.BOMB_EXPLODED: 0,
         
-        BOMB_DROPPED_FOR_CRATE: 0.02,
+        NEW_CELL_FOUND: 0.2,
+        
+        BOMB_DROPPED_FOR_CRATE: 0.2,
         
         e.KILLED_OPPONENT: 5,
         e.GOT_KILLED: -10,
-        e.KILLED_SELF: -10,
+        e.KILLED_SELF: -5,
         e.SURVIVED_ROUND: 5
     }
     reward = sum([game_rewards[event] for event in events])
@@ -164,30 +182,30 @@ def reward_from_events(events) -> float:
     return reward
 
 
-if __name__ == '__main__':
-    print('Training the agent...')
+# if __name__ == '__main__':
+#     print('Training the agent...')
 
-    # Initialize wandb
-    wandb.init(project="MLE_Bomberman", name="991211lja")
+#     # Initialize wandb
+#     wandb.init(project="MLE_Bomberman", name="991211lja")
 
-    # Configure wandb to log hyperparameters and metrics
-    wandb.config.update({
-        "model_name": MODEL_NAME,
-        "feature_dim": 22,
-        "action_dim": 6,
-        "hidden_dim": 128,
-        "gamma": 0.99
-    })
+#     # Configure wandb to log hyperparameters and metrics
+#     wandb.config.update({
+#         "model_name": MODEL_NAME,
+#         "feature_dim": 22,
+#         "action_dim": 6,
+#         "hidden_dim": 128,
+#         "gamma": 0.99
+#     })
 
-    # Log metrics during training
-    def log_metrics(episode, reward, loss):
-        wandb.log({
-            "episode": episode,
-            "reward": reward,
-            "loss": loss,
-            "score": score,
-            "events": events
-        })
+#     # Log metrics during training
+#     def log_metrics(episode, reward, loss):
+#         wandb.log({
+#             "episode": episode,
+#             "reward": reward,
+#             "loss": loss,
+#             "score": score,
+#             "events": events
+#         })
 
-    # Make sure to call log_metrics() after each episode in your training loop
+#     # Make sure to call log_metrics() after each episode in your training loop
     

@@ -8,23 +8,34 @@ import torch
 import torch.nn as nn
 
 from .policy_model import *
+from .config import *
+from .rulebased_teacher import TeacherModel
+
+# Path
+MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_'+ 
+                          MODEL_TYPE + '_seq_' + str(SEQ_LEN) + '_layer_' + 
+                          str(N_LAYERS) + '_' + str(LAST_EPISODE) + '.pt')
 
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
-MODEL_NAME = 'coin1'
-LAST_EPISODE = 0
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_' + str(LAST_EPISODE) + '.pt')
 
 def setup(self):
     np.random.seed()
     self.logger.info('Successfully entered setup code')
-    # TODO: Choose a model architecture and hyperparameters according to the arugments passed to the agent
-    self.model = FFPolicy(feature_dim=22, action_dim=6, hidden_dim=128, episode=0, gamma=0.99, model_name=MODEL_NAME)
+    
+    # Choose a model architecture and hyperparameters according to the arugments passed to the agent
+    if MODEL_TYPE == 'FF':
+        seq_len = 1
+        self.model = FFPolicy(feature_dim=22, action_dim=6, hidden_dim=128, seq_len=seq_len, n_layers=N_LAYERS, episode=0, gamma=0.99, model_name=MODEL_NAME, WANDB=WANDB)
+    elif MODEL_TYPE == 'LSTM':
+        self.model = LSTMPolicy(feature_dim=22, action_dim=6, hidden_dim=128, seq_len=SEQ_LEN, n_layers=N_LAYERS, episode=0, gamma=0.99, model_name=MODEL_NAME, WANDB=WANDB)
+    elif MODEL_TYPE == 'PPO':
+        self.model = PPOPolicy(feature_dim=22, action_dim=6, hidden_dim=128, episode=0, gamma=0.99, model_name=MODEL_NAME, WANDB=WANDB)
     
     # Create a game state history for the agent
     # self.opponent_history = deque([], 5) # save the last 5 actions of the opponents
     # self.bomb_history = deque([], 5) # save the last 5 bomb positions
-    
+    self.model.state_seqs = deque([], SEQ_LEN)
     
     if self.train:
         self.logger.info('Loading model')
@@ -41,19 +52,32 @@ def setup(self):
 def act(self, game_state) -> str:
     # This is the main function that the agent calls to get an action
     game_state_features = state_to_features(game_state)
-    self.model.game_state_history.append(game_state_features)
     
     action_probs = nn.functional.softmax(self.model.forward(game_state_features), dim=0)
-    self.model.action_probs.append(action_probs)
-    
     action_probs = action_probs.detach().numpy()
+    # print(action_probs.shape)
     
-    if np.isnan(action_probs).any():
-        self.logger.info('Action probabilities contain NaN values')
-        action = np.random.choice(['RIGHT', 'LEFT', 'UP', 'DOWN', 'BOMB'], p=[0.23, 0.23, 0.23, 0.23, 0.08])
-        
+    if MODEL_TYPE == 'FF':
+        self.model.game_state_history.append(game_state_features)
+    elif MODEL_TYPE == 'LSTM':
+        self.model.state_seqs.append(game_state_features)
+        self.model.game_state_history.append(torch.stack(list(self.model.state_seqs)).unsqueeze(0))
+    elif MODEL_TYPE == 'PPO':
+        pass
+    
+    
+    # Behavioral cloning if training and episode < TEACH_EPISODE
+    if self.train and self.model.episode < TEACH_EPISODE:
+        action, _ = self.teacher.act(game_state)
+        self.logger.info(f'Behavior cloning action: {action}')
+        self.logger.info(f'Predicted cloning action probabilities: {action_probs[ACTIONS.index(action)]}')
     else:
-        action = np.random.choice(ACTIONS, p=action_probs)
+        if np.isnan(action_probs).any():
+            self.logger.info('Action probabilities contain NaN values')
+            action = np.random.choice(['RIGHT', 'LEFT', 'UP', 'DOWN', 'BOMB'], p=[0.23, 0.23, 0.23, 0.23, 0.08])
+        else:
+            action = np.random.choice(ACTIONS, p=action_probs)
+        
     
     # record the action index
     self.model.actions.append(ACTIONS.index(action))

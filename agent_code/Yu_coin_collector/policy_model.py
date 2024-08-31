@@ -12,27 +12,30 @@ ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 
 # Simple feedforward policy
 class FFPolicy(BasePolicy):
-    def __init__(self, feature_dim, action_dim=len(ACTIONS), hidden_dim=128, n_layers=1, **kwargs):
+    def __init__(self, feature_dim, action_dim=len(ACTIONS), hidden_dim=128, n_layers=1, seq_len=1, **kwargs):
         super(FFPolicy, self).__init__(feature_dim, action_dim, hidden_dim, **kwargs)
         self.fc1 = nn.Linear(feature_dim, hidden_dim)
         self.fc = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers-1)])
         self.fc2 = nn.Linear(hidden_dim, action_dim)
+        self.n_layers = n_layers
+        self.seq_len = seq_len
         
         self.init_optimizer()
 
         # Initialize wandb
-        wandb.init(
-            project="MLE_Bomberman",
-            config={
-                "architecture": "FFPolicy",
-                "feature_dim": self.feature_dim,
-                "action_dim": self.action_dim,
-                "hidden_dim": self.hidden_dim,
-                "n_layers": self.n_layers,
-                "learning_rate": self.lr,
-                "gamma": self.gamma
-            }
-        )
+        if self.WANDB:
+            wandb.init(
+                project="MLE_Bomberman",
+                config={
+                    "architecture": "FFPolicy",
+                    "feature_dim": self.feature_dim,
+                    "action_dim": self.action_dim,
+                    "hidden_dim": self.hidden_dim,
+                    "n_layers": self.n_layers,
+                    "learning_rate": self.lr,
+                    "gamma": self.gamma
+                }
+            )
 
 
     def forward(self, features):
@@ -91,13 +94,15 @@ class FFPolicy(BasePolicy):
         self.loss_values.append(sum(loss_values)/len(loss_values))
 
         # Log metrics to wandb
-        wandb.log({
-            "episode": self.episode,
-            "loss": self.loss_values[-1],
-            "reward": self.final_rewards[-1],
-            "discounted_reward": self.final_discounted_rewards[-1],
-            "score": self.scores[-1]
-        })
+        if self.WANDB:
+            wandb.log({
+                "episode": self.episode,
+                "loss": self.loss_values[-1],
+                "reward": self.final_rewards[-1],
+                "discounted_reward": self.final_discounted_rewards[-1],
+                "score": self.scores[-1]
+            })
+            
 
 # LSTM policy
 class LSTMPolicy(BasePolicy):
@@ -108,31 +113,44 @@ class LSTMPolicy(BasePolicy):
         self.seq_len = seq_len
         self.n_layers = n_layers
         self.state_seqs = deque(maxlen=self.seq_len)
+        self.batch_size = 1
+        self.hidden = (torch.zeros(self.n_layers, self.batch_size, self.hidden_dim),
+                       torch.zeros(self.n_layers, self.batch_size, self.hidden_dim))
         
         self.init_optimizer()
-
+        
         # Initialize wandb
-        wandb.init(
-            project="MLE_Bomberman",
-            config={
-                "architecture": "LSTMPolicy",
-                "feature_dim": self.feature_dim,
-                "action_dim": self.action_dim,
-                "hidden_dim": self.hidden_dim,
-                "n_layers": self.n_layers,
-                "learning_rate": self.lr,
-                "gamma": self.gamma
-            }
-        )
+        if self.WANDB:
+            wandb.init(
+                project="MLE_Bomberman",
+                config={
+                    "architecture": "LSTMPolicy",
+                    "feature_dim": self.feature_dim,
+                    "action_dim": self.action_dim,
+                    "hidden_dim": self.hidden_dim,
+                    "n_layers": self.n_layers,
+                    "seq_len": self.seq_len,
+                    "learning_rate": self.lr,
+                    "gamma": self.gamma
+                }
+            )
 
-    def forward(self, features, hidden=None):
-        self.state_seqs.append(features)
-        if len(self.state_seqs) < self.seq_len:
-            return torch.zeros(self.action_dim), hidden
-        state_seqs = torch.stack(list(self.state_seqs)).unsqueeze(0)
-        x, hidden = self.lstm(state_seqs, hidden)
-        x = self.fc(x[:, -1, :])
-        return x, hidden
+    def forward(self, features, index=None):
+        if index is None:
+            self.state_seqs.append(features)
+            if len(self.state_seqs) < self.seq_len:
+                return torch.zeros(self.action_dim)
+            state_seqs = torch.stack(list(self.state_seqs)).unsqueeze(0)
+        else:
+            state_seqs = self.game_state_history[index]
+        
+        x, self.hidden = self.lstm(state_seqs, self.hidden)
+        
+        # Detach hidden state to prevent backprop through entire history
+        self.hidden = (self.hidden[0].detach(), self.hidden[1].detach())
+        
+        y = self.fc(x[:, -1, :])
+        return y.squeeze()
 
     def train(self):
         loss_values = []
@@ -157,7 +175,7 @@ class LSTMPolicy(BasePolicy):
         for t in range(steps):
             rewards = discounted_rewards[t:]
             features = self.game_state_history[t]
-            action_prob, hidden = self.forward(features, hidden)
+            action_prob = self.forward(features, index=t)
             action_prob = F.softmax(action_prob, dim=-1)
             log_prob = torch.log(action_prob + 1e-9)[self.actions[t]]
             policy_loss = -log_prob * rewards
@@ -176,13 +194,24 @@ class LSTMPolicy(BasePolicy):
         self.loss_values.append(sum(loss_values) / len(loss_values))
 
         # Log metrics to wandb
-        wandb.log({
-            "episode": self.episode,
-            "loss": self.loss_values[-1],
-            "reward": self.final_rewards[-1],
-            "discounted_reward": self.final_discounted_rewards[-1],
-            "score": self.scores[-1]
-        })
+        if self.WANDB:
+            wandb.log({
+                "episode": self.episode,
+                "loss": self.loss_values[-1],
+                "reward": self.final_rewards[-1],
+                "discounted_reward": self.final_discounted_rewards[-1],
+                "score": self.scores[-1]
+            })
+        
+        # Reset the hidden state
+        self.reset()
+        
+    def reset(self):
+        self.state_seqs.clear()
+        
+    def reset_hidden(self):
+        self.hidden = None
+        self.state_seqs.clear()
 
 # TODO: Fix the Actor-Critic Proximal policy
 class PPOPolicy(BasePolicy):
@@ -202,18 +231,19 @@ class PPOPolicy(BasePolicy):
         self.init_optimizer()
 
         # Initialize wandb
-        wandb.init(
-            project="MLE_Bomberman",
-            config={
-                "architecture": "PPOPolicy",
-                "feature_dim": feature_dim,
-                "action_dim": action_dim,
-                "hidden_dim": hidden_dim,
-                "clip_epsilon": clip_epsilon,
-                "learning_rate": self.lr,
-                "gamma": self.gamma
-            }
-        )
+        if self.WANDB:
+            wandb.init(
+                project="MLE_Bomberman",
+                config={
+                    "architecture": "PPOPolicy",
+                    "feature_dim": feature_dim,
+                    "action_dim": action_dim,
+                    "hidden_dim": hidden_dim,
+                    "clip_epsilon": clip_epsilon,
+                    "learning_rate": self.lr,
+                    "gamma": self.gamma
+                }
+            )
 
     def forward(self, features):
         return F.softmax(self.actor(features), dim=0)
