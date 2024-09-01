@@ -11,28 +11,19 @@ from .policy_utils import *
 from .policy_model import *
 from .config import *
 
-
-# Path
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_'+ 
-                          MODEL_TYPE + '_seq_' + str(SEQ_LEN) + '_layer_' + 
-                          str(N_LAYERS) + '_' + str(LAST_EPISODE) + '.pt')
-
-
-ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
-
 def setup(self):
     np.random.seed()
     self.logger.info('Successfully entered setup code')
     
     # Choose a model architecture and hyperparameters according to the arugments passed to the agent
     if MODEL_TYPE == 'FF':
-        self.model = FFPolicy(feature_dim=22, action_dim=6, hidden_dim=128, seq_len=1, 
+        self.model = FFPolicy(feature_dim=FEATURE_DIM, action_dim=6, hidden_dim=128, seq_len=1, 
                               n_layers=N_LAYERS, alpha = ALPHA, episode=0, gamma=0.99, model_name=MODEL_NAME, WANDB=WANDB)
     elif MODEL_TYPE == 'LSTM':
-        self.model = LSTMPolicy(feature_dim=22, action_dim=6, hidden_dim=128, seq_len=SEQ_LEN, 
+        self.model = LSTMPolicy(feature_dim=FEATURE_DIM, action_dim=6, hidden_dim=128, seq_len=SEQ_LEN, 
                                 n_layers=N_LAYERS, alpha = ALPHA, episode=0, gamma=0.99, model_name=MODEL_NAME, WANDB=WANDB)
     elif MODEL_TYPE == 'PPO':
-        self.model = PPOPolicy(feature_dim=22, action_dim=6, hidden_dim=128, episode=0, gamma=0.99, model_name=MODEL_NAME, WANDB=WANDB)
+        self.model = PPOPolicy(feature_dim=FEATURE_DIM, action_dim=6, hidden_dim=128, episode=0, gamma=0.99, model_name=MODEL_NAME, WANDB=WANDB)
     
     # Create a game state history for the agent
     # self.opponent_history = deque([], 5) # save the last 5 actions of the opponents

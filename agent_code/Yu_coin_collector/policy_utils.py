@@ -1,25 +1,25 @@
 import numpy as np
 import settings as s
 
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import os
 import wandb
 from .rulebased_teacher import TeacherModel
-#TODO: Visualize the training process by wandb
-ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
+
+from .config import ACTIONS
 
 # General policy class
 class BasePolicy(nn.Module):
-    def __init__(self, feature_dim, action_dim=len(ACTIONS), hidden_dim=128, n_layers=1, alpha = 0.1, episode=0,
+    def __init__(self, feature_dim, action_dim=len(ACTIONS), hidden_dim=128, n_layers=1, seq_len=1, alpha = 0.1, episode=0,
                  gamma=0.99, model_name='', lr=0.001, WANDB=False):
         super(BasePolicy, self).__init__()
         self.feature_dim = feature_dim
         self.action_dim = action_dim
         self.hidden_dim = hidden_dim
         self.n_layers = n_layers
+        self.seq_len = seq_len
         self.WANDB = WANDB
         
         # Episode information
@@ -38,6 +38,8 @@ class BasePolicy(nn.Module):
         self.lr = lr
         # self.epsilon = epsilon # in the policy-based methods, epsilon is not used
         self.loss_values = []
+        self.teacher_loss = []
+        self.policy_loss = []
         self.final_rewards = []
         self.final_discounted_rewards = []
         self.scores = []
@@ -47,6 +49,22 @@ class BasePolicy(nn.Module):
         self.teacher_action = []
         self.alpha = alpha # weight for the imitation loss
         
+        # Initialize wandb
+        if self.WANDB:
+            wandb.init(
+                project="MLE_Bomberman",
+                config={
+                    "feature_dim": self.feature_dim,
+                    "action_dim": self.action_dim,
+                    "hidden_dim": self.hidden_dim,
+                    "n_layers": self.n_layers,
+                    "seq_len": self.seq_len,
+                    "alpha": self.alpha,
+                    "learning_rate": self.lr,
+                    "gamma": self.gamma
+                }
+            )
+        
         
     def init_optimizer(self, lr=0.001):
         self.lr = lr
@@ -55,14 +73,15 @@ class BasePolicy(nn.Module):
     def forward(self, features):
         raise NotImplementedError("Subclasses should implement this!")
 
-    def save(self):
+    def save(self, path = None):
         checkpoint = {
             'episode': self.episode,
             'model_name': self.name,
             'gamma': self.gamma,
             'lr': self.lr,
             'n_layers': self.n_layers,
-            # 'epsilon': self.epsilon,
+            'seq_len': self.seq_len,
+            'alpha': self.alpha,
             'loss_values': self.loss_values,
             'final_rewards': self.final_rewards,
             'final_discounted_rewards': self.final_discounted_rewards,
@@ -71,10 +90,13 @@ class BasePolicy(nn.Module):
             'optimizer_state_dict': self.optimizer.state_dict()
         }
         
-        torch.save(checkpoint, os.path.join("Saves/", self.checkpoint_dir, f"{self.name}_{self.episode}.pt"))
+        if path is None:
+            path = os.path.join(self.checkpoint_dir, f"{self.name}_{self.episode}.pt")
+        
+        torch.save(checkpoint, path)
 
         # Upload the model to wandb
-        # wandb.save(os.path.join("Saves/", self.checkpoint_dir, f"{self.name}_{self.episode}.pt"))
+        # wandb.save(path)
     
     
     def load(self, path = None):
@@ -114,7 +136,7 @@ class BasePolicy(nn.Module):
         self.action_probs.clear()
       
 
-def state_to_features(game_state: dict) -> torch.Tensor:
+def state_to_features(game_state: dict, feature_dim=22) -> torch.Tensor:
     # This is a function that converts the game state to the input of your model
     
     # General information
@@ -149,16 +171,22 @@ def state_to_features(game_state: dict) -> torch.Tensor:
                           self_pos]
     valid_position = []
     for pos in candidate_position:
-        if ((free[pos] == 0) and 
+        # print("The position is: ", pos, arena[pos])
+        # print("The bombs_time is: ", bombs_time[pos])
+        # print("The explosion_map is: ", game_state['explosion_map'][pos])
+        # print("The others are: ", others)
+        # print("The bombs are: ", bombs)
+        if ((arena[pos] == 0) and 
                 (game_state['explosion_map'][pos] < 1) and 
                 (bombs_time[pos] > 0) and
-                (not any(pos == other_pos for other_pos in others)) and 
-                (not any(pos == bomb for bomb, t in bombs))):
+                (all(pos != other_pos for other_pos in others)) and 
+                (all(pos != bomb for bomb, t in bombs))):
             valid_position.append(pos)
-    up_feasible = [self_pos[0], self_pos[1]-1] in valid_position
-    down_feasible = [self_pos[0], self_pos[1]+1] in valid_position
-    left_feasible = [self_pos[0]-1, self_pos[1]] in valid_position
-    right_feasible = [self_pos[0]+1, self_pos[1]] in valid_position
+    # print("The valid position is: ", valid_position)
+    up_feasible = (self_pos[0], self_pos[1]-1) in valid_position
+    down_feasible = (self_pos[0], self_pos[1]+1) in valid_position
+    left_feasible = (self_pos[0]-1, self_pos[1]) in valid_position
+    right_feasible = (self_pos[0]+1, self_pos[1]) in valid_position
     wait_feasible = self_pos in valid_position
     
     # Features 1.3. bomb left
@@ -232,10 +260,23 @@ def state_to_features(game_state: dict) -> torch.Tensor:
             right_bomb_nearby = 1 if xb <= self_pos[0] and arena[xb+1, yb] != -1 else 0
     
     # merge all features
-    features = np.array([up_feasible, down_feasible, left_feasible, right_feasible, wait_feasible, bomb_left,
+    if feature_dim == 22:
+        features = np.array([up_feasible, down_feasible, left_feasible, right_feasible, wait_feasible, bomb_left,
                          up_coins_score, down_coins_score, left_coins_score, right_coins_score,
                          up_crates_score, down_crates_score, left_crates_score, right_crates_score,
                          up_dead_ends_score, down_dead_ends_score, left_dead_ends_score, right_dead_ends_score,
                          up_bomb_nearby, down_bomb_nearby, left_bomb_nearby, right_bomb_nearby])
+    elif feature_dim == 18:
+        features = np.array([up_feasible, down_feasible, left_feasible, right_feasible, wait_feasible, bomb_left,
+                         up_coins_score, down_coins_score, left_coins_score, right_coins_score,
+                         up_crates_score, down_crates_score, left_crates_score, right_crates_score,
+                         up_bomb_nearby, down_bomb_nearby, left_bomb_nearby, right_bomb_nearby])
+    elif feature_dim == 14:
+        features = np.array([up_feasible, down_feasible, left_feasible, right_feasible, wait_feasible, bomb_left,
+                         up_coins_score, down_coins_score, left_coins_score, right_coins_score,
+                         up_bomb_nearby, down_bomb_nearby, left_bomb_nearby, right_bomb_nearby])
+    else:
+        raise ValueError("Invalid feature dimension")
     features = torch.tensor(features, dtype=torch.float32)
+    # print(features)
     return features

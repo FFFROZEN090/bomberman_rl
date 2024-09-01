@@ -127,13 +127,31 @@ def end_of_round(self, last_game_state, last_action, events):
     self.logger.info(f'Episode {self.model.episode} ended with score {last_game_state["self"][1]}')
     self.logger.info(f'Events: {events}')
     self.logger.info(f'Rewards: {self.model.final_rewards[-1]}')
+    self.logger.info(f'Discounted rewards: {self.model.final_discounted_rewards[-1]}')
     self.logger.info(f'Scores: {self.model.scores[-1]}')
+    
+    # Log metrics to wandb
+    if WANDB:
+        wandb.log({
+            "loss": self.model.loss_values[-1],
+            "teacher_loss": self.model.teacher_loss[-1],
+            "policy_loss": self.model.policy_loss[-1],
+            "reward": self.model.final_rewards[-1],
+            "discounted_reward": self.model.final_discounted_rewards[-1],
+            "score": self.model.scores[-1]
+        })
+    
+    # Reset the model
+    self.model.reset()
+    
+    self.model.episode += 1
     
     # Save model for every 200 episodes
     if self.model.episode % 200 == 0:
-        self.model.save()
-    
-    self.model.episode += 1
+        save_path = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_'+ 
+                          MODEL_TYPE + '_seq_' + str(SEQ_LEN) + '_layer_' + 
+                          str(N_LAYERS) + '_' + str(self.model.episode) + '.pt')
+        self.model.save(save_path)
 
 
 def reward_from_events(events) -> float:
