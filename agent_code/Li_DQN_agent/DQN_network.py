@@ -160,51 +160,7 @@ class ReplayBuffer:
         return random.sample(self.buffer, batch_size)
 
     def __len__(self):
-        return len(self.buffer)
-
-class DQNLoss(nn.Module):
-    def __init__(self, gamma=0.99):
-        super(DQNLoss, self).__init__()
-        self.gamma = gamma
-
-    def forward(self, q_values, target_q_values, actions, rewards, dones):
-        # Get Q-values for the actions taken
-        q_values = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
-        
-        # Compute the target Q-values
-        with torch.no_grad():
-            # Compute max Q-value for next state
-            next_q_values = target_q_values.max(1)[0]
-            # Compute the expected Q-values
-            expected_q_values = rewards + (1 - dones) * self.gamma * next_q_values
-
-        # Compute the loss using Huber loss (smooth L1 loss)
-        loss = F.smooth_l1_loss(q_values, expected_q_values)
-
-        return loss
-
-def compute_td_loss(model, target_model, experiences, gamma=0.99, device='cpu'):
-    states = torch.FloatTensor([exp.agent_state for exp in experiences]).to(device)
-    actions = torch.LongTensor([exp.action for exp in experiences]).to(device)
-    rewards = torch.FloatTensor([exp.reward for exp in experiences]).to(device)
-    next_states = torch.FloatTensor([exp.agent_next_state for exp in experiences]).to(device)
-    dones = torch.FloatTensor([exp.done for exp in experiences]).to(device)
-
-    # Compute Q(s, a) - the model computes Q(s), then we select the columns of actions taken
-    q_values = model(states)
-    
-    # Compute Q(s', a') - the target network computes Q(s'), then we select the best action
-    with torch.no_grad():
-        next_q_values = target_model(next_states)
-
-    # Compute the loss
-    loss_fn = DQNLoss(gamma)
-    loss = loss_fn(q_values, next_q_values, actions, rewards, dones)
-
-    return loss
-
-
-    
+        return len(self.buffer)    
 
 
 if __name__ == "__main__":

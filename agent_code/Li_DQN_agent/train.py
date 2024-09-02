@@ -43,10 +43,10 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     events = calculate_events(self, old_game_state, self_action, new_game_state, events)
 
     # Get DQN state
-    state = get_state(self, old_game_state, self_action, new_game_state)
+    state = get_low_level_state(self, old_game_state, self_action, new_game_state)
 
     # Get old state
-    old_state = get_state(self, old_game_state, self_action, new_game_state)
+    old_state = get_low_level_state(self, old_game_state, self_action, new_game_state)
 
     # Get reward
     reward = reward_from_events(events)
