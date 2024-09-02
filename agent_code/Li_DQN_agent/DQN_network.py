@@ -3,6 +3,7 @@ DQN network
 
 """
 
+from collections import deque
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -41,6 +42,8 @@ class DQN(nn.Module):
         # Learning rate
         self.learning_rate = 0.001
 
+        self.epoch = 0
+
     def forward(self, x):
         # Forward pass through the sequential model
         return self.model(x)
@@ -57,10 +60,24 @@ class DQN(nn.Module):
             return torch.argmax(q_values).item()
 
 
-    def train(self, replay_buffer, batch_size, device='cpu'):
-        # Sample a batch of experiences from the replay buffer
-        experiences = replay_buffer.sample(batch_size)
-        
+    def sample_experiences(self, replay_buffer, batch_size):
+        # Calculate the number of samples from each source
+        replay_samples = int(0.4 * batch_size)
+        experience_samples = batch_size - replay_samples
+
+        # Sample from replay buffer
+        replay_experiences = random.sample(replay_buffer.buffer, min(replay_samples, len(replay_buffer.buffer)))
+
+        # Sample from experiences dataset
+        dataset_experiences = random.sample(self.experiences, min(experience_samples, len(self.experiences)))
+
+        # Combine and shuffle the samples
+        experiences = replay_experiences + dataset_experiences
+        random.shuffle(experiences)
+
+        return experiences
+    
+    def convert_experiences_to_tensors(self, experiences, device):
         # Separate the batch into numpy arrays
         states = np.array([exp.global_state for exp in experiences])
         actions = np.array([exp.action for exp in experiences])
@@ -74,6 +91,15 @@ class DQN(nn.Module):
         rewards = torch.FloatTensor(rewards).to(device)
         next_states = torch.FloatTensor(next_states).to(device)
         dones = torch.BoolTensor(dones).to(device)
+
+        return states, actions, rewards, next_states, dones
+
+    def train(self, replay_buffer, batch_size, device='cpu'):
+        # Sample experiences
+        experiences = self.sample_experiences(replay_buffer, batch_size)
+        
+        # Convert experiences to tensors using the new member function
+        states, actions, rewards, next_states, dones = self.convert_experiences_to_tensors(experiences, device)
 
         # Compute Q-values for current states
         current_q_values = self(states).gather(1, actions.unsqueeze(1)).squeeze(1)
@@ -93,7 +119,7 @@ class DQN(nn.Module):
         loss.backward()
         self.optimizer.step()
 
-        # Update exploration probability
+        # Restrict the exploration probability
         self.exploration_prob = max(self.exploration_prob * self.decay_rate, 0.1)
 
         return loss.item()
@@ -162,6 +188,7 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
 
+# TODO: Design Proper Loss Function
 class DQNLoss(nn.Module):
     def __init__(self, gamma=0.99):
         super(DQNLoss, self).__init__()

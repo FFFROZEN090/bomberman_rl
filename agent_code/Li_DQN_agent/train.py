@@ -6,6 +6,7 @@ import logging
 # from policynet import PolicyNet
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from collections import deque
 
@@ -16,6 +17,7 @@ import wandb
 from .DQN_network import ExperienceDataset, ReplayBuffer
 from .DQN_datatype import Experience
 from .DQN_utils import get_state
+
 
 
 # events
@@ -71,6 +73,11 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         # Update the epoch
         self.model.epoch += 1
 
+        # Clear the experience buffer
+        self.experience_buffer.clear()
+
+    
+
 def calculate_events(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[dict]) -> List[dict]:
     # add position to visited history
     self.visited_history.append(new_game_state['self'][3])
@@ -125,7 +132,37 @@ def end_of_round(self, last_game_state, last_action, events):
     # Update the episode
     self.episode += 1
 
-    pass
+    # Store the experience
+    experience = Experience(
+        global_state=self.last_state,
+        action=self.last_action,
+        reward=reward_from_events(events),
+        global_next_state=get_state(last_game_state),
+        done=True
+    )
+    self.experience_buffer.add(experience)
+    self.replay_buffer.add(experience)
+
+    # Check if the buffer is full enough for training
+    if len(self.replay_buffer) >= self.model.batch_size:
+        self.model.train()
+
+        # Update the epoch
+        self.model.epoch += 1
+
+        # Clear the experience buffer
+        self.experience_buffer.clear()
+
+    # Log training information
+    self.logger.debug(f"Episode {self.episode} ended. Total reward: {last_game_state['self'][1]}. Loss: {loss.item() if 'loss' in locals() else 'N/A'}")
+
+    # Reset all last values
+    self.last_reward = None
+    self.last_action = None
+    self.last_state = None
+    self.last_game_state = None
+    self.visited_history.clear()
+
 
 
 def reward_from_events(events) -> float:

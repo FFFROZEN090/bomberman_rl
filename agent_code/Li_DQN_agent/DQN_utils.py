@@ -229,7 +229,7 @@ def check_reward_zone(state, high_level_state):
                     high_level_state[x, y, 1] = 1
 
 
-    return high_level_states
+    return high_level_state
 
 
 
