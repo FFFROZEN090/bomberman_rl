@@ -26,7 +26,7 @@ NEW_CELL_FOUND = 'NEW_CELL_FOUND' # The agent found a new cell
 
 
 def setup_training(self):
-    self.visited_history = deque([], 20)
+    self.visited_history = deque([], 5)
     self.coin_history = []
     self.episode = 0
     
@@ -66,7 +66,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     # add position to visited history
     self.visited_history.append(new_game_state['self'][3])
     # check if the agent is in a loop, if so, add an event to events list
-    if self.visited_history.count(new_game_state['self'][3]) > 2:
+    if self.visited_history.count(new_game_state['self'][3]) > 3:
         events.append(LOOP_DETECTED)
     
     # distance to coins: if getting close to coins at the first time, add an event to events list
@@ -173,12 +173,12 @@ def reward_from_events(events) -> float:
         COIN_CLOSER: 0.25,
         e.COIN_COLLECTED: 4,
         
-        BOMB_TIME4: -0.1,
         BOMB_TIME3: -0.2,
         BOMB_TIME2: -0.3,
         BOMB_TIME1: -0.5,
         EXCAPE_FROM_BOMB: 0.5,
         e.BOMB_EXPLODED: 0,
+        e.OPPONENT_ELIMINATED: 0,
         
         NEW_CELL_FOUND: 0.2,
         
