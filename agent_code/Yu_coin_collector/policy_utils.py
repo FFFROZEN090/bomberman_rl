@@ -12,7 +12,7 @@ from .config import ACTIONS
 
 # General policy class
 class BasePolicy(nn.Module):
-    def __init__(self, feature_dim, action_dim=len(ACTIONS), hidden_dim=128, n_layers=1, seq_len=1, alpha = 0.1, episode=0,
+    def __init__(self, feature_dim, hidden_dim, n_layers, seq_len, alpha, action_dim=len(ACTIONS), episode=0,
                  gamma=0.99, model_name='', lr=0.001, WANDB=False):
         super(BasePolicy, self).__init__()
         self.feature_dim = feature_dim
