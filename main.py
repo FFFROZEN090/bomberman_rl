@@ -116,7 +116,7 @@ def main(argv = None):
     play_parser.add_argument("--n-rounds", type=int, default=10, help="How many rounds to play")
     play_parser.add_argument("--save-replay", const=True, default=False, action='store', nargs='?', help='Store the game as .pt for a replay')
     play_parser.add_argument("--match-name", help="Give the match a name")
-
+    
     play_parser.add_argument("--silence-errors", default=False, action="store_true", help="Ignore errors from agents")
 
     group = play_parser.add_mutually_exclusive_group()
