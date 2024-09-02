@@ -15,7 +15,7 @@ import wandb
 
 from .DQN_network import ExperienceDataset, ReplayBuffer
 from .DQN_datatype import Experience
-from .DQN_utils import get_state
+from .DQN_utils import get_state, get_low_level_state, get_high_level_state
 
 
 # events
@@ -44,10 +44,10 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     events = calculate_events(self, old_game_state, self_action, new_game_state, events)
 
     # Get DQN state
-    state = get_low_level_state(self, old_game_state, self_action, new_game_state)
+    state = get_low_level_state(new_game_state)
 
     # Get old state
-    old_state = get_low_level_state(self, old_game_state, self_action, new_game_state)
+    old_state = get_low_level_state(old_game_state)
 
     # Get reward
     reward = reward_from_events(events)
@@ -57,19 +57,25 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
     # If self.last_reward is not None, then store the experience
     if self.last_reward is not None:
-        done = new_game_state['round'] == s.MAX_ROUNDS
-        self.experience_buffer.append(Experience(old_state, action_number, reward, state, done))
+        self.experience_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
+        self.replay_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
 
     # Update last reward
     self.last_reward = reward
 
     self.logger.info(f'Events: {events}')
 
-    if len(self.experience_buffer) > self.batch_size:
-        self.model.train()
+
+
+    if len(self.replay_buffer) == self.batch_size:
+        print(f"len(self.replay_buffer): {len(self.replay_buffer)}")
+        self.model.train(self.replay_buffer, self.batch_size)
 
         # Update the epoch
         self.model.epoch += 1
+
+        self.replay_buffer.clear()
+        print(f"len(self.replay_buffer 2): {len(self.replay_buffer)}")
 
 def calculate_events(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[dict]) -> List[dict]:
     # add position to visited history
@@ -119,13 +125,43 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
 
 # TODO: Verify the end of the game, update the model, score, reward, and log the game info
 def end_of_round(self, last_game_state, last_action, events): 
-    # record the last game state info
-    self.last_game_state = last_game_state
-    
-    # Update the episode
-    self.episode += 1
+    self.logger.debug(f'Encountered game event(s) {", ".join([event for event in events])}')
 
-    pass
+    # Get DQN state
+    state = get_low_level_state(last_game_state)
+
+    # Get old state
+    old_state = get_low_level_state(last_game_state)
+
+    # Get reward
+    reward = reward_from_events(events)
+
+    # Get Action number
+    action_number = ACTIONS.index(last_action)
+
+    # If self.last_reward is not None, then store the experience
+    if self.last_reward is not None:
+        self.experience_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
+        self.replay_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
+
+
+
+    self.logger.info(f'Events: {events}')
+
+    if len(self.replay_buffer) == self.batch_size:
+        self.model.train(self.replay_buffer, self.batch_size)
+
+        # Update the epoch
+        self.model.epoch += 1
+
+        self.replay_buffer.clear()
+
+        # Reset last reward
+    self.last_reward = None
+    self.last_game_state = None
+    self.last_state = None
+    self.last_action = None
+
 
 
 def reward_from_events(events) -> float:
@@ -138,6 +174,7 @@ def reward_from_events(events) -> float:
         e.MOVED_DOWN: -0.01,
         e.WAITED: -0.03,
         e.BOMB_DROPPED: -0.01,
+        e.OPPONENT_ELIMINATED: 0.1,
         
         LOOP_DETECTED: -0.1,
         

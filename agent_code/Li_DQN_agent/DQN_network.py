@@ -3,6 +3,7 @@ DQN network
 
 """
 
+from collections import deque
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -29,11 +30,12 @@ class DQN(nn.Module):
             # Fully connected layers
             nn.Linear(128 * 3 * 3, 512),
             nn.ReLU(),
-            nn.Linear(512, output_size)
+            nn.Linear(512, output_size),
+            nn.ReLU()
         )
 
         # Exploration probability
-        self.exploration_prob = 0.9
+        self.exploration_prob = 1.0
 
         # Decay rate
         self.decay_rate = 0.995
@@ -41,7 +43,19 @@ class DQN(nn.Module):
         # Learning rate
         self.learning_rate = 0.001
 
+        self.output_size = output_size
+
+        self.input_channels = input_channels
+
+        self.gamma = 0.99
+
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+
+        self.epoch = 0
+
     def forward(self, x):
+        # Permute the dimensions from [batch, height, width, channels] to [batch, channels, height, width]
+        x = x.permute(0, 3, 1, 2)
         # Forward pass through the sequential model
         return self.model(x)
 
@@ -52,8 +66,11 @@ class DQN(nn.Module):
             self.exploration_prob *= self.decay_rate
             return np.random.randint(self.output_size)
         else:
+            # Print state shape
+        
             with torch.no_grad():
-                q_values = self.forward(torch.tensor(state, dtype=torch.float32).unsqueeze(0))
+                input = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+                q_values = self.forward(input)
             return torch.argmax(q_values).item()
 
 
@@ -66,7 +83,7 @@ class DQN(nn.Module):
         actions = np.array([exp.action for exp in experiences])
         rewards = np.array([exp.reward for exp in experiences])
         next_states = np.array([exp.global_next_state for exp in experiences])
-        dones = np.array([exp.done for exp in experiences])
+        dones = np.array([exp.done for exp in experiences]).astype(bool)
 
         # Convert numpy arrays to PyTorch tensors and move to the specified device
         states = torch.FloatTensor(states).to(device)
@@ -92,6 +109,10 @@ class DQN(nn.Module):
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        print(f"loss: {loss.item()}")
+        print(f"current_q_values: {sum(current_q_values)}")
+        print(f"target_q_values: {sum(target_q_values)}")
+        print("Parameters updated")
 
         # Update exploration probability
         self.exploration_prob = max(self.exploration_prob * self.decay_rate, 0.1)
@@ -103,6 +124,13 @@ class DQN(nn.Module):
 
     def load(self, path):
         self.load_state_dict(torch.load(path))
+
+    def init_parameters(self):
+        for param in self.parameters():
+            if len(param.size()) == 2:  # Linear layer
+                torch.nn.init.xavier_uniform_(param)
+            elif len(param.size()) == 4:  # Convolution layer
+                torch.nn.init.kaiming_uniform_(param)
 
 class ExperienceDataset:
     def __init__(self, max_size=100000,load_from_npy=False, npy_file_path=None):
@@ -153,16 +181,19 @@ class ReplayBuffer:
     def __init__(self, capacity):
         self.buffer = deque(maxlen=capacity)
 
-    def push(self, experience: Experience):
+    def add(self, experience: Experience):
         self.buffer.append(experience)
 
     def sample(self, batch_size):
         return random.sample(self.buffer, batch_size)
+    
+    def clear(self):
+        self.buffer.clear()
 
     def __len__(self):
         return len(self.buffer)    
 
 
 if __name__ == "__main__":
-    model = DQN(24, 6)
-    summary(model, (24, 17, 17))
+    model = DQN(14, 6)
+    summary(model, (14, 17, 17))
