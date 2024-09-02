@@ -3,7 +3,7 @@ This file contains the callback functions for the DQN agent.
 """
 import os
 import numpy as np
-from .DQN_utils import get_state
+from .DQN_utils import get_state, get_low_level_state, get_high_level_state
 from .DQN_network import DQN, ExperienceDataset, ReplayBuffer
 
 
@@ -32,14 +32,22 @@ def setup(self):
     self.last_game_state = None
 
     # Initialize the experience buffer
-    self.experience_buffer = ExperienceDataset(max_size=EXPERIENCE_BUFFER_SIZE)
+    self.experience_buffer = ExperienceDataset(EXPERIENCE_BUFFER_SIZE)
 
     # Initialize the replay buffer
-    self.replay_buffer = ReplayBuffer(max_size=REPLAY_BUFFER_SIZE)
+    self.replay_buffer = ReplayBuffer(REPLAY_BUFFER_SIZE)
+
+    self.batch_size = REPLAY_BUFFER_SIZE
+
+    self.max_rounds = 20000
 
     if self.train:
-        self.model.load(MODEL_PATH)
-        self.logger.info('Model for training loaded')
+        if not os.path.exists(MODEL_PATH):
+            self.model.init_parameters()
+            self.logger.info('Model parameters initialized for training')
+        elif os.path.exists(MODEL_PATH):
+            self.model.load(MODEL_PATH)
+            self.logger.info('Model for training loaded')
     else:
         self.model.load(MODEL_PATH)
         self.model.eval()
@@ -50,7 +58,7 @@ def setup(self):
 def act(agent, game_state: dict):
     agent.logger.info('Choosing action based on current state.')
     # Get the current state representation
-    current_state = get_state(game_state)
+    current_state = get_low_level_state(game_state)
 
     # Use the model to choose an action
     action = agent.model.action(current_state)

@@ -1,7 +1,7 @@
 
 from .DQN_datatype import Experience
-from .DQN_utils import get_state, check_danger_area, check_reward_zone, reward_from_events, game_events_occurred
-from .DQN_network import DQN, compute_td_loss, DQNLoss, ReplayBuffer, ExperienceDataset
+from .DQN_utils import get_state, check_danger_area, check_reward_zone, get_low_level_state, get_high_level_state
+from .DQN_network import DQN, ReplayBuffer, ExperienceDataset
 
 __all__ = [
     'Experience',
@@ -9,11 +9,9 @@ __all__ = [
     'check_danger_area',
     'check_reward_zone',
     'DQN',
-    'compute_td_loss',
-    'DQNLoss',
     'ReplayBuffer',
     'ExperienceDataset',
-    'reward_from_events',
-    'game_events_occurred'
+    'get_low_level_state',
+    'get_high_level_state'
 ]
 
