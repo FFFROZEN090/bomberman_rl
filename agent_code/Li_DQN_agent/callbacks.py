@@ -11,7 +11,7 @@ EXPERIENCE_BUFFER_SIZE = 1000000
 REPLAY_BUFFER_SIZE = 8000
 
 MODEL_NAME = 'Li_DQN_agent'
-LAST_EPISODE = 100
+LAST_EPISODE = 0
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_' + str(LAST_EPISODE) + '.pt')
@@ -47,6 +47,7 @@ def setup(self):
             self.logger.info('Model parameters initialized for training')
         elif os.path.exists(MODEL_PATH):
             self.model.load(MODEL_PATH)
+            self.model.exploration_prob = 0.1
             self.logger.info('Model for training loaded')
     else:
         self.model.load(MODEL_PATH)

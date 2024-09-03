@@ -163,6 +163,11 @@ def end_of_round(self, last_game_state, last_action, events):
     self.last_action = None
 
 
+    score = last_game_state['self'][1]
+    if score > 0:
+        print(f"Score: {score}")
+
+
 
 def reward_from_events(events) -> float:
     reward = 0
@@ -172,11 +177,11 @@ def reward_from_events(events) -> float:
         e.MOVED_RIGHT: 0.1,
         e.MOVED_UP: 0.1,
         e.MOVED_DOWN: 0.1,
-        e.WAITED: 0.01,
-        e.BOMB_DROPPED: 0.5,
+        e.WAITED: -0.1,
+        e.BOMB_DROPPED: 1.0,
         e.OPPONENT_ELIMINATED: 0.00,
         
-        LOOP_DETECTED: -0.1,
+        LOOP_DETECTED: -0.5,
         
         e.CRATE_DESTROYED: 1.0,
         e.COIN_FOUND: 10.0,

@@ -132,6 +132,7 @@ class DQN(nn.Module):
         current_q_values = (current_q_values - current_q_values.mean()) / current_q_values.std()
 
         # Print sum of target Q-values and current Q-values
+        print(f"sum of rewards: {rewards.sum()}")
         print(f"sum of target Q-values: {target_q_values.sum()}")
         print(f"sum of current Q-values: {current_q_values.sum()}")
 
@@ -146,6 +147,12 @@ class DQN(nn.Module):
 
         # Restrict the exploration probability
         self.exploration_prob = max(self.exploration_prob * self.decay_rate, 0.1)
+
+        # If after 100 epochs, save the model
+        if self.epoch % 100 == 0:
+            if not os.path.exists(os.path.join(os.path.dirname(__file__), 'checkpoints')):
+                os.mkdir(os.path.join(os.path.dirname(__file__), 'checkpoints'))
+            self.save(os.path.join(os.path.dirname(__file__), 'checkpoints', 'Li_DQN_agent' + '_' + str(self.epoch) + '.' + 'pt'))
 
         return loss.item()
 
