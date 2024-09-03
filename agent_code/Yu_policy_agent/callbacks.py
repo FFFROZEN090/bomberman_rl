@@ -44,7 +44,7 @@ def setup(self):
 
 def act(self, game_state) -> str:
     # This is the main function that the agent calls to get an action
-    action_probs = nn.functional.softmax(self.model.forward(game_state=game_state), dim=0)
+    action_probs = self.model.forward(game_state=game_state)
     action_probs = action_probs.detach().numpy()
     # print(action_probs.shape)
 
@@ -62,7 +62,7 @@ def act(self, game_state) -> str:
         
     
     # record the action index
-    self.model.actions.append(ACTIONS.index(action))
+    self.model.action_history.append(ACTIONS.index(action))
         
     return action
 

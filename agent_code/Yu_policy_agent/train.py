@@ -18,7 +18,7 @@ COIN_CLOSER = 'COIN_CLOSER'
 BOMB_TIME1 = 'BOMB_TIME1' # 1 step to explode
 BOMB_TIME2 = 'BOMB_TIME2' # 2 steps to explode
 BOMB_TIME3 = 'BOMB_TIME3' # 3 steps to explode
-BOMB_TIME4 = 'BOMB_TIME4' # 4 steps to explode
+# BOMB_TIME4 = 'BOMB_TIME4' # 4 steps to explode
 BOMB_DROPPED_FOR_CRATE = 'BOMB_DROPPED_FOR_CRATE' # Crates will be destroyed by the dropped bomb
 EXCAPE_FROM_BOMB = 'EXCAPE_FROM_BOMB'
 LOOP_DETECTED = 'LOOP_DETECTED'
@@ -93,8 +93,8 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         events.append(BOMB_TIME2)
     elif bombs_time[new_game_state['self'][3]] == 3:
         events.append(BOMB_TIME3)
-    elif bombs_time[new_game_state['self'][3]] == 4:
-        events.append(BOMB_TIME4)
+    # elif bombs_time[new_game_state['self'][3]] == 4:
+    #     events.append(BOMB_TIME4)
     
     
     # If the agent was in danger zone but now safe, add an event to events list
@@ -150,7 +150,8 @@ def end_of_round(self, last_game_state, last_action, events):
     if self.model.episode % 200 == 0:
         save_path = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_'+ 
                           MODEL_TYPE + '_seq_' + str(SEQ_LEN) + '_layer_' + 
-                          str(N_LAYERS) + '_' + str(self.model.episode) + '.pt')
+                          str(N_LAYERS) + '_feature_' + str(FEATURE_DIM) + '_alpha_' + 
+                          str(ALPHA) + '_' + str(self.model.episode) + '.pt')
         self.model.save(save_path)
 
 
