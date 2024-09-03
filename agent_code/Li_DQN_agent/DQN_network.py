@@ -74,7 +74,7 @@ class DQN(nn.Module):
             return torch.argmax(q_values).item()
 
 
-    def sample_experiences(self, replay_buffer, batch_size):
+    def sample_experiences(self, replay_buffer, experience_buffer, batch_size):
         # Calculate the number of samples from each source
         replay_samples = int(0.4 * batch_size)
         experience_samples = batch_size - replay_samples
@@ -83,7 +83,7 @@ class DQN(nn.Module):
         replay_experiences = random.sample(replay_buffer.buffer, min(replay_samples, len(replay_buffer.buffer)))
 
         # Sample from experiences dataset
-        dataset_experiences = random.sample(self.experiences, min(experience_samples, len(self.experiences)))
+        dataset_experiences = experience_buffer.sample(min(experience_samples, len(experience_buffer)))
 
         # Combine and shuffle the samples
         experiences = replay_experiences + dataset_experiences
@@ -108,22 +108,32 @@ class DQN(nn.Module):
 
         return states, actions, rewards, next_states, dones
 
-    def train(self, replay_buffer, batch_size, device='cpu'):
+    def train(self, replay_buffer, experience_buffer, batch_size, device='cpu'):
         # Sample experiences
-        experiences = self.sample_experiences(replay_buffer, batch_size)
+        experiences = self.sample_experiences(replay_buffer, experience_buffer, batch_size)
         
         # Convert experiences to tensors using the new member function
         states, actions, rewards, next_states, dones = self.convert_experiences_to_tensors(experiences, device)
 
         # Compute Q-values for current states
-        current_q_values = self(states).gather(1, actions.unsqueeze(1)).squeeze(1)
+        current_q_values = self(states).gather(1, actions.unsqueeze(1)).squeeze(1) + 1e-9
+
 
         # Compute Q-values for next states
         with torch.no_grad():
             next_q_values = self(next_states).max(1)[0]
 
-        # Compute target Q-values
-        target_q_values = rewards + (1 - dones.float()) * self.gamma * next_q_values
+        target_q_values = rewards + (1 - dones.float()/batch_size) * self.gamma * next_q_values
+        # For done states, the target Q-value is equal to the reward
+        target_q_values[dones] = rewards[dones]
+
+        # Normalize the target Q-values and  current Q-values
+        target_q_values = (target_q_values - target_q_values.mean()) / target_q_values.std()
+        current_q_values = (current_q_values - current_q_values.mean()) / current_q_values.std()
+
+        # Print sum of target Q-values and current Q-values
+        print(f"sum of target Q-values: {target_q_values.sum()}")
+        print(f"sum of current Q-values: {current_q_values.sum()}")
 
         # Compute loss
         loss = nn.MSELoss()(current_q_values, target_q_values)
@@ -133,9 +143,6 @@ class DQN(nn.Module):
         loss.backward()
         self.optimizer.step()
         print(f"loss: {loss.item()}")
-        print(f"current_q_values: {sum(current_q_values)}")
-        print(f"target_q_values: {sum(target_q_values)}")
-        print("Parameters updated")
 
         # Restrict the exploration probability
         self.exploration_prob = max(self.exploration_prob * self.decay_rate, 0.1)
@@ -157,7 +164,7 @@ class DQN(nn.Module):
 
 class ExperienceDataset:
     def __init__(self, max_size=100000,load_from_npy=False, npy_file_path=None):
-        self.experiences = []
+        self.experiences = deque(maxlen=max_size)
         self.max_size = max_size
         if load_from_npy and npy_file_path:
             self.load_from_npy(npy_file_path)

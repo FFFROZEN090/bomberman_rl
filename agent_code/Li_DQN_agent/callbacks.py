@@ -8,7 +8,7 @@ from .DQN_network import DQN, ExperienceDataset, ReplayBuffer
 
 
 EXPERIENCE_BUFFER_SIZE = 1000000
-REPLAY_BUFFER_SIZE = 800
+REPLAY_BUFFER_SIZE = 8000
 
 MODEL_NAME = 'Li_DQN_agent'
 LAST_EPISODE = 100

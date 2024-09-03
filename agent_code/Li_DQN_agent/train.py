@@ -52,14 +52,17 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
     # Get reward
     reward = reward_from_events(events)
+    
+    if self.last_action is None:
+        self.last_action = self_action
 
-    # Get Action number
-    action_number = ACTIONS.index(self_action)
+    # Get Last Action number
+    last_action_number = ACTIONS.index(self.last_action) if self.last_action is not None else None
 
     # If self.last_reward is not None, then store the experience
-    if self.last_reward is not None:
-        self.experience_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
-        self.replay_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
+    if self.last_reward is not None and self.last_action is not None:
+        self.experience_buffer.add(Experience(old_state, None, last_action_number, reward, state, None, False))
+        self.replay_buffer.add(Experience(old_state, None, last_action_number, reward, state, None, False))
 
     # Update last reward
     self.last_reward = reward
@@ -69,14 +72,12 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
 
     if len(self.replay_buffer) == self.batch_size:
-        print(f"len(self.replay_buffer): {len(self.replay_buffer)}")
-        self.model.train(self.replay_buffer, self.batch_size)
+        self.model.train(self.replay_buffer, self.experience_buffer, self.batch_size)
 
         # Update the epoch
         self.model.epoch += 1
 
         self.replay_buffer.clear()
-        print(f"len(self.replay_buffer 2): {len(self.replay_buffer)}")
 
 def calculate_events(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[dict]) -> List[dict]:
     # add position to visited history
@@ -138,19 +139,17 @@ def end_of_round(self, last_game_state, last_action, events):
     reward = reward_from_events(events)
 
     # Get Action number
-    action_number = ACTIONS.index(last_action)
+    last_action = ACTIONS.index(self.last_action) if self.last_action is not None else None
 
     # If self.last_reward is not None, then store the experience
-    if self.last_reward is not None:
-        self.experience_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
-        self.replay_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
-
-
+    if self.last_reward is not None and self.last_action is not None:
+        self.experience_buffer.add(Experience(old_state, None, last_action, reward, state, None, False))
+        self.replay_buffer.add(Experience(old_state, None, last_action, reward, state, None, False))
 
     self.logger.info(f'Events: {events}')
 
     if len(self.replay_buffer) == self.batch_size:
-        self.model.train(self.replay_buffer, self.batch_size)
+        self.model.train(self.replay_buffer, self.experience_buffer, self.batch_size)
 
         # Update the epoch
         self.model.epoch += 1
@@ -169,35 +168,35 @@ def reward_from_events(events) -> float:
     reward = 0
     game_rewards = {
         e.INVALID_ACTION: -0.05,
-        e.MOVED_LEFT: -0.01,
-        e.MOVED_RIGHT: -0.01,
-        e.MOVED_UP: -0.01,
-        e.MOVED_DOWN: -0.01,
-        e.WAITED: -0.03,
-        e.BOMB_DROPPED: -0.01,
-        e.OPPONENT_ELIMINATED: 0.1,
+        e.MOVED_LEFT: 0.1,
+        e.MOVED_RIGHT: 0.1,
+        e.MOVED_UP: 0.1,
+        e.MOVED_DOWN: 0.1,
+        e.WAITED: 0.01,
+        e.BOMB_DROPPED: 0.5,
+        e.OPPONENT_ELIMINATED: 0.00,
         
         LOOP_DETECTED: -0.1,
         
-        e.CRATE_DESTROYED: 0.05,
-        e.COIN_FOUND: 0.3,
-        COIN_CLOSE: 0.05,
-        COIN_CLOSER: 0.15,
-        e.COIN_COLLECTED: 1,
+        e.CRATE_DESTROYED: 1.0,
+        e.COIN_FOUND: 10.0,
+        COIN_CLOSE: 0.1,
+        COIN_CLOSER: 0.3,
+        e.COIN_COLLECTED: 2.0,
         
-        BOMB_TIME4: -0.1,
-        BOMB_TIME3: -0.2,
-        BOMB_TIME2: -0.3,
-        BOMB_TIME1: -0.5,
-        EXCAPE_FROM_BOMB: 0.5,
-        e.BOMB_EXPLODED: 0,
+        BOMB_TIME4: 0.4,
+        BOMB_TIME3: 0.3,
+        BOMB_TIME2: 0.2,
+        BOMB_TIME1: 0.1,
+        EXCAPE_FROM_BOMB:10.0,
+        e.BOMB_EXPLODED: 0.5,
         
-        BOMB_DROPPED_FOR_CRATE: 0.02,
+        BOMB_DROPPED_FOR_CRATE: 1.0,
         
-        e.KILLED_OPPONENT: 5,
-        e.GOT_KILLED: -10,
-        e.KILLED_SELF: -10,
-        e.SURVIVED_ROUND: 5
+        e.KILLED_OPPONENT: 20.0,
+        e.GOT_KILLED: -2,
+        e.KILLED_SELF: -1,
+        e.SURVIVED_ROUND: 10.0
     }
     reward = sum([game_rewards[event] for event in events])
     
