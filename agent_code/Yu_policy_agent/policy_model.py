@@ -40,9 +40,9 @@ class FFPolicy(BasePolicy):
         if index is None:
             # record the teacher's action for imitation learning
             teacher_action, _ = self.teacher.act(game_state)
-            self.teacher_action.append(teacher_action)
+            self.teacher_action_history.append(teacher_action)
             
-            game_state_features = state_to_features(game_state, feature_dim=self.feature_dim)
+            game_state_features = self.state_to_features(game_state)
             self.game_state_history.append(game_state_features)
         else:
             game_state_features = self.game_state_history[index]
@@ -51,45 +51,38 @@ class FFPolicy(BasePolicy):
         for fc in self.fc:
             x = F.relu(fc(x))
         x = self.fc2(x)
-        return x
+        
+        action_probs = self.getting_action_probs(x)
+        
+        return action_probs
 
     def train(self):
         loss_values = []
         teacher_loss_values = []
         policy_loss_values = []
         
-        # Calculate discounted rewards
-        discounted_rewards = []
-        
-        R = 0 
-        for r in reversed(self.rewards):
-            R = r + self.gamma * R
-            discounted_rewards.insert(0, R)
-        
-        discounted_rewards = torch.tensor(discounted_rewards)
-        # discounted_rewards = (discounted_rewards - discounted_rewards.mean()) / (discounted_rewards.std() + 1e-9)
+        discounted_rewards = self.getting_discounted_rewards()
         
         # Training loop for each step
-        if len(self.rewards) == len(self.actions) == len(self.game_state_history) == len(self.action_probs):
+        if len(self.rewards) == len(self.action_history) == len(self.game_state_history) == len(self.action_probs):
             steps = len(self.rewards)
         else:
             steps = len(self.rewards)-1
             
         for t in range(steps):
             rewards = discounted_rewards[t]
-            features = self.game_state_history[t]
             
             # Calculate action probabilities
             action_prob = F.softmax(self.forward(index=t), dim=0)
             
             # Calculate the imitation learning loss (cross-entropy loss between teacher's action and agent's action)
-            teacher_action_idx = ACTIONS.index(self.teacher_action[t])
+            teacher_action_idx = ACTIONS.index(self.teacher_action_history[t])
             teacher_action_prob = torch.zeros(self.action_dim)
             teacher_action_prob[teacher_action_idx] = 1
             teacher_loss = F.cross_entropy(action_prob, teacher_action_prob)
             
             # Calculate the RL loss
-            log_prob = torch.log(action_prob + 1e-9)[self.actions[t]] # add a small epsilon to avoid log(0)
+            log_prob = torch.log(action_prob + 1e-9)[self.action_history[t]] # add a small epsilon to avoid log(0)
             policy_loss = -log_prob * rewards
             
             # combine the two losses
@@ -110,6 +103,7 @@ class FFPolicy(BasePolicy):
         self.loss_values.append(sum(loss_values)/len(loss_values))
         self.teacher_loss.append(sum(teacher_loss_values)/len(teacher_loss_values))
         self.policy_loss.append(sum(policy_loss_values)/len(policy_loss_values))
+        self.survival_time.append(steps)
         
             
 
@@ -129,14 +123,6 @@ class LSTMPolicy(BasePolicy):
         self.hidden = (torch.zeros(self.n_layers, self.batch_size, self.hidden_dim),
                        torch.zeros(self.n_layers, self.batch_size, self.hidden_dim))
         
-        # Initialize wandb
-        if self.WANDB:
-            wandb.init(
-                config={
-                    "architecture": "FFPolicy"
-                }
-            )
-        
         self.init_optimizer()
         
 
@@ -144,15 +130,18 @@ class LSTMPolicy(BasePolicy):
         if index is None:
             # record the teacher's action for imitation learning
             teacher_action, _ = self.teacher.act(game_state)
-            self.teacher_action.append(teacher_action)
+            self.teacher_action_history.append(teacher_action)
             
-            game_state_features = state_to_features(game_state, feature_dim=self.feature_dim)
+            game_state_features = self.state_to_features(game_state)
             self.state_seqs.append(game_state_features)
             state_seqs = torch.stack(list(self.state_seqs)).unsqueeze(0)
             self.game_state_history.append(state_seqs)
             
             if len(self.state_seqs) < self.seq_len:
-                return torch.zeros(self.action_dim)
+                x = torch.zeros(self.action_dim)
+                action_probs = self.getting_action_probs(x)
+                return action_probs
+                
         else:
             state_seqs = self.game_state_history[index]
             
@@ -162,9 +151,10 @@ class LSTMPolicy(BasePolicy):
         # Detach hidden state to prevent backprop through entire history
         self.hidden = (self.hidden[0].detach(), self.hidden[1].detach())
         
-        y = self.fc(x[:, -1, :]).squeeze()
+        x = self.fc(x[:, -1, :]).squeeze()
+        action_probs = self.getting_action_probs(x)
         
-        return y
+        return action_probs
 
     def train(self):
         teacher_loss_values = []
@@ -172,43 +162,34 @@ class LSTMPolicy(BasePolicy):
         
         loss_values = []
         
-        # Calculate discounted rewards
-        discounted_rewards = []
-        R = 0
-        for r in reversed(self.rewards):
-            R = r + self.gamma * R
-            discounted_rewards.insert(0, R)
-        
-        discounted_rewards = torch.tensor(discounted_rewards)
-        # discounted_rewards = (discounted_rewards - discounted_rewards.mean()) / (discounted_rewards.std() + 1e-9)
+        discounted_rewards = self.getting_discounted_rewards()
         
         # Training loop
-        if len(self.rewards) == len(self.actions) == len(self.game_state_history) == len(self.action_probs):
+        if len(self.rewards) == len(self.action_history) == len(self.game_state_history) == len(self.action_probs):
             steps = len(self.rewards)
         else:
             steps = len(self.rewards) - 1
         
         for t in range(steps):
-            if self.teacher_action[t] != "WAIT":
+            # if self.teacher_action_history[t] != "WAIT":
                 rewards = discounted_rewards[t] # current steps' and future steps' rewards
-                action_prob = self.forward(index=t)
-                action_prob = F.softmax(action_prob, dim=-1)
+                action_probs = self.forward(index=t)
                 
                 # Calculate the imitation learning loss (cross-entropy loss between teacher's action and agent's action)
-                teacher_action_idx = ACTIONS.index(self.teacher_action[t])
+                teacher_action_idx = ACTIONS.index(self.teacher_action_history[t])
                 
-                # print("At step ", t, "the teacher action is ", self.teacher_action[t], " and the agent action is ", 
+                # print("At step ", t, "the teacher action is ", self.teacher_action_history[t], " and the agent action is ", 
                     #   ACTIONS[torch.argmax(action_prob)], "with the probability of " , 
                     #   torch.max(action_prob).item())
                 
                 teacher_action_prob = torch.zeros(self.action_dim)
                 teacher_action_prob[teacher_action_idx] = 1
-                teacher_loss = F.cross_entropy(action_prob, teacher_action_prob)
+                teacher_loss = F.cross_entropy(action_probs, teacher_action_prob)
                 
                 # Calculate the RL loss
-                log_prob = torch.log(action_prob + 1e-9)[self.actions[t]]
+                log_prob = torch.log(action_probs + 1e-9)[self.action_history[t]]
                 policy_loss = -log_prob * rewards
-                print("The action ", ACTIONS[self.actions[t]], " has the log probability of ", log_prob.item(), " and the reward is ", rewards)
+                # print("The action ", ACTIONS[self.action_history[t]], " has the log probability of ", log_prob.item(), " and the reward is ", rewards)
                 
                 # combine the two losses
                 loss = policy_loss* (1-self.alpha) + teacher_loss*self.alpha
@@ -228,6 +209,7 @@ class LSTMPolicy(BasePolicy):
         self.loss_values.append(sum(loss_values) / len(loss_values))
         self.teacher_loss.append(sum(teacher_loss_values)/len(teacher_loss_values))
         self.policy_loss.append(sum(policy_loss_values)/len(policy_loss_values))
+        self.survival_time.append(steps)
 
         
         
@@ -248,21 +230,6 @@ class PPOPolicy(BasePolicy):
         )
         self.clip_epsilon = clip_epsilon
         self.init_optimizer()
-
-        # Initialize wandb
-        if self.WANDB:
-            wandb.init(
-                project="MLE_Bomberman",
-                config={
-                    "architecture": "PPOPolicy",
-                    "feature_dim": feature_dim,
-                    "action_dim": action_dim,
-                    "hidden_dim": hidden_dim,
-                    "clip_epsilon": clip_epsilon,
-                    "learning_rate": self.lr,
-                    "gamma": self.gamma
-                }
-            )
 
     def forward(self, features):
         return F.softmax(self.actor(features), dim=0)
