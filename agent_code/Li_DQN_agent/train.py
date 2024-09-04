@@ -42,6 +42,8 @@ def setup_training(self):
 # TODO: Verify the game event, update the model, reward, experience
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[dict]) -> None:
     self.logger.debug(f'Encountered game event(s) {", ".join([event for event in events])}')
+    # print agent position
+    self.logger.info(f'Agent position: {new_game_state["self"][3]}')
     
     events = calculate_events(self, old_game_state, self_action, new_game_state, events)
 
@@ -71,7 +73,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     self.logger.info(f'Events: {events}')
 
     if len(self.replay_buffer) == self.batch_size:
-        self.model.train(self.replay_buffer, self.experience_buffer, self.target_model, self.batch_size)
+        self.model.train(self.replay_buffer, self.experience_buffer, self.batch_size, self.target_model)
 
         # Update the epoch
         self.model.epoch += 1
@@ -148,7 +150,7 @@ def end_of_round(self, last_game_state, last_action, events):
     self.logger.info(f'Events: {events}')
 
     if len(self.replay_buffer) == self.batch_size:
-        self.model.train(self.replay_buffer, self.experience_buffer, self.target_model, self.batch_size)
+        self.model.train(self.replay_buffer, self.experience_buffer, self.batch_size, self.target_model)
 
         # Update the epoch
         self.model.epoch += 1

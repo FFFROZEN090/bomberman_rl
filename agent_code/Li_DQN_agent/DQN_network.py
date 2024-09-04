@@ -13,6 +13,7 @@ from torchsummary import summary
 import random
 from .DQN_datatype import Experience
 import wandb
+import logging
 
 class DQN(nn.Module):
     def __init__(self, input_channels, output_size):
@@ -61,7 +62,6 @@ class DQN(nn.Module):
         if self.wandb:
             wandb.init(
                 project="bomberman_rl",
-                entity="your-entity-name",  # Replace with your wandb username or team name
                 config={
                     "model": 'Li_DQN_agent',
                     "learning_rate": self.learning_rate,
@@ -76,20 +76,28 @@ class DQN(nn.Module):
             wandb.watch
 
     def forward(self, x):
-        # Permute the dimensions from [batch, height, width, channels] to [batch, channels, height, width]
-        x = x.permute(0, 3, 1, 2)
-        # Forward pass through the sequential model
         return self.model(x)
 
 
     def action(self, state):
-        if np.random.rand() < self.exploration_prob:
+        # If the player position is at coner [1,1], [1,15], [15,1], [15,15], take the following actions
+        if state[0][1][1] == 1:
+            print("Corner 1,1")
+            return 2 if np.random.rand() < 0.5 else 1
+        elif state[0][1][15] == 1:
+            print("Corner 1,15")
+            return 0 if np.random.rand() < 0.5 else 1
+        elif state[0][15][1] == 1:
+            print("Corner 15,1")
+            return 2 if np.random.rand() < 0.5 else 3
+        elif state[0][15][15] == 1:
+            print("Corner 15,15")
+            return 3 if np.random.rand() < 0.5 else 0
+        elif np.random.rand() < self.exploration_prob:
             # Update the exploration probability
             self.exploration_prob *= self.decay_rate
             return np.random.randint(self.output_size)
         else:
-            # Print state shape
-        
             with torch.no_grad():
                 input = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
                 q_values = self.forward(input)
@@ -207,7 +215,7 @@ class DQN(nn.Module):
                 torch.nn.init.kaiming_uniform_(param)
 
 class ExperienceDataset:
-    def __init__(self, max_size=100000,load_from_npy=False, npy_file_path=None):
+    def __init__(self, max_size=1000000,load_from_npy=False, npy_file_path=None):
         self.experiences = deque(maxlen=max_size)
         self.max_size = max_size
         if load_from_npy and npy_file_path:
