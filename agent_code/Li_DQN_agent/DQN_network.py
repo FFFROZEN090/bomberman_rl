@@ -12,7 +12,7 @@ import os
 from torchsummary import summary
 import random
 from .DQN_datatype import Experience
-
+import wandb
 
 class DQN(nn.Module):
     def __init__(self, input_channels, output_size):
@@ -52,6 +52,28 @@ class DQN(nn.Module):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
 
         self.epoch = 0
+
+        self.wandb = True
+
+        self.score = 0
+
+        # Initialize wandb
+        if self.wandb:
+            wandb.init(
+                project="bomberman_rl",
+                entity="your-entity-name",  # Replace with your wandb username or team name
+                config={
+                    "model": 'Li_DQN_agent',
+                    "learning_rate": self.learning_rate,
+                    "gamma": self.gamma,
+                    "n_layers": 3,
+                    "seq_len": 3,
+                    "hidden_dim": 512,
+                }
+            )
+
+            # Log model architecture
+            wandb.watch
 
     def forward(self, x):
         # Permute the dimensions from [batch, height, width, channels] to [batch, channels, height, width]
@@ -108,7 +130,7 @@ class DQN(nn.Module):
 
         return states, actions, rewards, next_states, dones
 
-    def train(self, replay_buffer, experience_buffer, batch_size, device='cpu'):
+    def train(self, replay_buffer, experience_buffer, batch_size, target_model = None, device='cpu'):
         # Sample experiences
         experiences = self.sample_experiences(replay_buffer, experience_buffer, batch_size)
         
@@ -121,7 +143,10 @@ class DQN(nn.Module):
 
         # Compute Q-values for next states
         with torch.no_grad():
-            next_q_values = self(next_states).max(1)[0]
+            if target_model is None:
+                next_q_values = self(next_states).max(1)[0] + 1e-9
+            elif target_model is not None:
+                next_q_values = target_model(next_states).max(1)[0] + 1e-9
 
         target_q_values = rewards + (1 - dones.float()/batch_size) * self.gamma * next_q_values
         # For done states, the target Q-value is equal to the reward
@@ -131,11 +156,6 @@ class DQN(nn.Module):
         target_q_values = (target_q_values - target_q_values.mean()) / target_q_values.std()
         current_q_values = (current_q_values - current_q_values.mean()) / current_q_values.std()
 
-        # Print sum of target Q-values and current Q-values
-        print(f"sum of rewards: {rewards.sum()}")
-        print(f"sum of target Q-values: {target_q_values.sum()}")
-        print(f"sum of current Q-values: {current_q_values.sum()}")
-
         # Compute loss
         loss = nn.MSELoss()(current_q_values, target_q_values)
 
@@ -143,7 +163,16 @@ class DQN(nn.Module):
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-        print(f"loss: {loss.item()}")
+        if self.wandb:
+            wandb.log({
+                "sum of rewards": rewards.sum(),
+                "sum of target Q-values": target_q_values.sum(),
+                "sum of current Q-values": current_q_values.sum(),
+                "loss": loss.item(),
+                "epoch": self.epoch,
+                "exploration_prob": self.exploration_prob,
+                "score": self.score
+            })
 
         # Restrict the exploration probability
         self.exploration_prob = max(self.exploration_prob * self.decay_rate, 0.1)
@@ -153,6 +182,14 @@ class DQN(nn.Module):
             if not os.path.exists(os.path.join(os.path.dirname(__file__), 'checkpoints')):
                 os.mkdir(os.path.join(os.path.dirname(__file__), 'checkpoints'))
             self.save(os.path.join(os.path.dirname(__file__), 'checkpoints', 'Li_DQN_agent' + '_' + str(self.epoch) + '.' + 'pt'))
+
+            if target_model is not None:
+                # Copy Parameters from the model to the target model
+                target_model.load_state_dict(self.state_dict())
+
+            # Upload the model to wandb
+            if self.wandb:
+                wandb.save(os.path.join(os.path.dirname(__file__), 'checkpoints', 'Li_DQN_agent' + '_' + str(self.epoch) + '.' + 'pt'))
 
         return loss.item()
 
@@ -178,7 +215,7 @@ class ExperienceDataset:
 
     def add(self, experience: Experience):
         if len(self.experiences) >= self.max_size:
-            self.experiences.pop(0)
+            self.experiences.pop()
         self.experiences.append(experience)
 
     def sample(self, batch_size):

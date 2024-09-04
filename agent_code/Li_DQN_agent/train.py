@@ -30,6 +30,7 @@ BOMB_DROPPED_FOR_CRATE = 'BOMB_DROPPED_FOR_CRATE' # Crates will be destroyed by 
 EXCAPE_FROM_BOMB = 'EXCAPE_FROM_BOMB'
 LOOP_DETECTED = 'LOOP_DETECTED'
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
+WANDB = True
 
 # TODO: Setup model and experience structure for DQN
 def setup_training(self):
@@ -45,10 +46,10 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     events = calculate_events(self, old_game_state, self_action, new_game_state, events)
 
     # Get DQN state
-    state = get_low_level_state(new_game_state)
+    state = get_state(new_game_state)
 
     # Get old state
-    old_state = get_low_level_state(old_game_state)
+    old_state = get_state(old_game_state)
 
     # Get reward
     reward = reward_from_events(events)
@@ -69,10 +70,8 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
     self.logger.info(f'Events: {events}')
 
-
-
     if len(self.replay_buffer) == self.batch_size:
-        self.model.train(self.replay_buffer, self.experience_buffer, self.batch_size)
+        self.model.train(self.replay_buffer, self.experience_buffer, self.target_model, self.batch_size)
 
         # Update the epoch
         self.model.epoch += 1
@@ -130,10 +129,10 @@ def end_of_round(self, last_game_state, last_action, events):
     self.logger.debug(f'Encountered game event(s) {", ".join([event for event in events])}')
 
     # Get DQN state
-    state = get_low_level_state(last_game_state)
+    state = get_state(last_game_state)
 
     # Get old state
-    old_state = get_low_level_state(last_game_state)
+    old_state = get_state(last_game_state)
 
     # Get reward
     reward = reward_from_events(events)
@@ -149,7 +148,7 @@ def end_of_round(self, last_game_state, last_action, events):
     self.logger.info(f'Events: {events}')
 
     if len(self.replay_buffer) == self.batch_size:
-        self.model.train(self.replay_buffer, self.experience_buffer, self.batch_size)
+        self.model.train(self.replay_buffer, self.experience_buffer, self.target_model, self.batch_size)
 
         # Update the epoch
         self.model.epoch += 1
@@ -164,8 +163,8 @@ def end_of_round(self, last_game_state, last_action, events):
 
 
     score = last_game_state['self'][1]
-    if score > 0:
-        print(f"Score: {score}")
+    
+    self.model.score = score
 
 
 
