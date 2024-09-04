@@ -18,6 +18,7 @@ COIN_CLOSER = 'COIN_CLOSER'
 BOMB_TIME1 = 'BOMB_TIME1' # 1 step to explode
 BOMB_TIME2 = 'BOMB_TIME2' # 2 steps to explode
 BOMB_TIME3 = 'BOMB_TIME3' # 3 steps to explode
+BOMB_FARTHER = 'BOMB_FARTHER' # The agent is farther from the bomb
 # BOMB_TIME4 = 'BOMB_TIME4' # 4 steps to explode
 BOMB_DROPPED_FOR_CRATE = 'BOMB_DROPPED_FOR_CRATE' # Crates will be destroyed by the dropped bomb
 EXCAPE_FROM_BOMB = 'EXCAPE_FROM_BOMB'
@@ -93,13 +94,22 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         events.append(BOMB_TIME2)
     elif bombs_time[new_game_state['self'][3]] == 3:
         events.append(BOMB_TIME3)
-    # elif bombs_time[new_game_state['self'][3]] == 4:
-    #     events.append(BOMB_TIME4)
+
     
+    # If the agent is farther from the bomb, add an event to events list
+    if bombs_time[old_game_state['self'][3]] < 5:
+        if bombs_time[new_game_state['self'][3]] == 5:
+            # If the agent was in danger zone but now safe, add an event to events list
+            events.append(EXCAPE_FROM_BOMB)
+        for (xb, yb), t in bombs:
+            if xb == old_game_state['self'][3][0] and abs(yb - old_game_state['self'][3][1]) < 4:
+                if abs(yb - old_game_state['self'][3][1]) < abs(yb - new_game_state['self'][3][1]):
+                    events.append(BOMB_FARTHER)
+            if yb == old_game_state['self'][3][1] and abs(xb - old_game_state['self'][3][0]) < 4:
+                if abs(xb - old_game_state['self'][3][0]) < abs(xb - new_game_state['self'][3][0]):
+                    events.append(BOMB_FARTHER)
     
-    # If the agent was in danger zone but now safe, add an event to events list
-    if bombs_time[old_game_state['self'][3]] < 5 and bombs_time[new_game_state['self'][3]] == 5:
-        events.append('EXCAPE_FROM_BOMB')
+        
         
     # If the agent dropped a bomb and crates will be destroyed, add an event to events list
     crates = old_game_state['field'] == 1
@@ -138,7 +148,8 @@ def end_of_round(self, last_game_state, last_action, events):
             "policy_loss": self.model.policy_loss[-1],
             "reward": self.model.final_rewards[-1],
             "discounted_reward": self.model.final_discounted_rewards[-1],
-            "score": self.model.scores[-1]
+            "score": self.model.scores[-1],
+            "survival_time": self.model.survival_time[-1]
         })
     
     # Reset the model
@@ -146,8 +157,8 @@ def end_of_round(self, last_game_state, last_action, events):
     
     self.model.episode += 1
     
-    # Save model for every 200 episodes
-    if self.model.episode % 200 == 0:
+    # Save model for every 1000 episodes
+    if self.model.episode % 1000 == 0:
         save_path = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_'+ 
                           MODEL_TYPE + '_seq_' + str(SEQ_LEN) + '_layer_' + 
                           str(N_LAYERS) + '_feature_' + str(FEATURE_DIM) + '_alpha_' + 
@@ -158,26 +169,27 @@ def end_of_round(self, last_game_state, last_action, events):
 def reward_from_events(events) -> float:
     reward = 0
     game_rewards = {
-        e.INVALID_ACTION: -0.1,
-        e.MOVED_LEFT: -0.01,
-        e.MOVED_RIGHT: -0.01,
-        e.MOVED_UP: -0.01,
-        e.MOVED_DOWN: -0.01,
-        e.WAITED: -0.03,
-        e.BOMB_DROPPED: -0.01,
+        e.INVALID_ACTION: -0.5,
+        e.MOVED_LEFT: 0.1,
+        e.MOVED_RIGHT: 0.1,
+        e.MOVED_UP: 0.1,
+        e.MOVED_DOWN: 0.1,
+        e.WAITED: -0.3,
+        e.BOMB_DROPPED: 0.1,
         
         LOOP_DETECTED: -0.1,
         
         e.CRATE_DESTROYED: 0.05,
         e.COIN_FOUND: 0.3,
-        COIN_CLOSE: 0.03,
+        COIN_CLOSE: 0.05,
         COIN_CLOSER: 0.25,
-        e.COIN_COLLECTED: 4,
+        e.COIN_COLLECTED: 2,
         
         BOMB_TIME3: -0.2,
         BOMB_TIME2: -0.3,
         BOMB_TIME1: -0.5,
-        EXCAPE_FROM_BOMB: 0.5,
+        EXCAPE_FROM_BOMB: 1,
+        BOMB_FARTHER: 0.3,
         e.BOMB_EXPLODED: 0,
         e.OPPONENT_ELIMINATED: 0,
         

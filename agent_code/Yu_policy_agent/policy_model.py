@@ -61,7 +61,7 @@ class FFPolicy(BasePolicy):
         teacher_loss_values = []
         policy_loss_values = []
         
-        discounted_rewards = self.getting_discounted_rewards()
+        discounted_rewards = self.getting_discounted_rewards(standadised=True)
         
         # Training loop for each step
         if len(self.rewards) == len(self.action_history) == len(self.game_state_history) == len(self.action_probs):
@@ -91,12 +91,14 @@ class FFPolicy(BasePolicy):
             # Gradient clipping
             torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
             
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
             loss_values.append(loss)
             teacher_loss_values.append(teacher_loss)
             policy_loss_values.append(policy_loss)
+        
+        loss = torch.cat(loss_values).sum()
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
         
         self.final_rewards.append(sum(self.rewards))
         self.final_discounted_rewards.append(sum(discounted_rewards))
@@ -104,8 +106,6 @@ class FFPolicy(BasePolicy):
         self.teacher_loss.append(sum(teacher_loss_values)/len(teacher_loss_values))
         self.policy_loss.append(sum(policy_loss_values)/len(policy_loss_values))
         self.survival_time.append(steps)
-        
-            
 
 # LSTM policy
 class LSTMPolicy(BasePolicy):
@@ -157,12 +157,11 @@ class LSTMPolicy(BasePolicy):
         return action_probs
 
     def train(self):
-        teacher_loss_values = []
-        policy_loss_values = []
+        total_loss = 0
+        total_teacher_loss = 0
+        total_policy_loss = 0
         
-        loss_values = []
-        
-        discounted_rewards = self.getting_discounted_rewards()
+        discounted_rewards = self.getting_discounted_rewards(standadised=True)
         
         # Training loop
         if len(self.rewards) == len(self.action_history) == len(self.game_state_history) == len(self.action_probs):
@@ -192,23 +191,23 @@ class LSTMPolicy(BasePolicy):
                 # print("The action ", ACTIONS[self.action_history[t]], " has the log probability of ", log_prob.item(), " and the reward is ", rewards)
                 
                 # combine the two losses
-                loss = policy_loss* (1-self.alpha) + teacher_loss*self.alpha
+                total_loss += policy_loss* (1-self.alpha) + teacher_loss*self.alpha
+                total_policy_loss += policy_loss
+                total_teacher_loss += teacher_loss
                 # print("The percentage of teacher loss is: ", teacher_loss/loss)
-                # Gradient clipping
-                torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
                 
-                self.optimizer.zero_grad()
-                loss.backward(retain_graph=True)
-                self.optimizer.step()
-                loss_values.append(loss.item())
-                teacher_loss_values.append(teacher_loss.item())
-                policy_loss_values.append(policy_loss.item())
+        
+        self.optimizer.zero_grad()
+        total_loss.backward()
+        # Gradient clipping
+        torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
+        self.optimizer.step()
         
         self.final_rewards.append(sum(self.rewards))
         self.final_discounted_rewards.append(discounted_rewards[0])
-        self.loss_values.append(sum(loss_values) / len(loss_values))
-        self.teacher_loss.append(sum(teacher_loss_values)/len(teacher_loss_values))
-        self.policy_loss.append(sum(policy_loss_values)/len(policy_loss_values))
+        self.loss_values.append(total_loss.item()/steps)
+        self.teacher_loss.append(total_teacher_loss.item()/steps)
+        self.policy_loss.append(total_policy_loss.item()/steps)
         self.survival_time.append(steps)
 
         
