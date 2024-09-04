@@ -173,8 +173,8 @@ class BasePolicy(nn.Module):
                 self.birth_corner = 3
             else:
                 raise ValueError("The birth corner is not determined at step 0.")
-        else:
-            print("The birth corner is: ", self.birth_corner, 'at step ', game_state['step'])
+        # else:
+            # print("The birth corner is: ", self.birth_corner, 'at step ', game_state['step'])
         
         # Features 1.2. determine the direction feasibility
         candidate_position = [(self_pos[0], self_pos[1]-1), (self_pos[0], self_pos[1]+1), 
@@ -182,18 +182,12 @@ class BasePolicy(nn.Module):
                             self_pos]
         valid_position = []
         for pos in candidate_position:
-            # print("The position is: ", pos, arena[pos])
-            # print("The bombs_time is: ", bombs_time[pos])
-            # print("The explosion_map is: ", game_state['explosion_map'][pos])
-            # print("The others are: ", others)
-            # print("The bombs are: ", bombs)
             if ((arena[pos] == 0) and 
                     (game_state['explosion_map'][pos] < 1) and 
                     (bombs_time[pos] > 0) and
                     (all(pos != other_pos for other_pos in others)) and 
                     (all(pos != bomb for bomb, t in bombs))):
                 valid_position.append(pos)
-        # print("The valid position is: ", valid_position)
         up_feasible = (self_pos[0], self_pos[1]-1) in valid_position
         down_feasible = (self_pos[0], self_pos[1]+1) in valid_position
         left_feasible = (self_pos[0]-1, self_pos[1]) in valid_position
@@ -318,7 +312,7 @@ class BasePolicy(nn.Module):
             raise ValueError("The birth corner is not determined.")
         
         features = torch.tensor(features, dtype=torch.float32)
-        print("features: ", features, "birth_corner: ", self.birth_corner)
+        # print("features: ", features, "birth_corner: ", self.birth_corner)
         return features
     
     def getting_action_probs(self, x):
@@ -339,7 +333,7 @@ class BasePolicy(nn.Module):
         # normalize the output
         action_probs = F.softmax(x, dim=-1)
         
-        print("The action probabilities are: ", action_probs)
+        # print("The action probabilities are: ", action_probs)
         return action_probs
     
     def getting_discounted_rewards(self, standadised = False):

@@ -59,7 +59,12 @@ def act(self, game_state) -> str:
         action = np.random.choice(['RIGHT', 'LEFT', 'UP', 'DOWN', 'BOMB'], p=[0.23, 0.23, 0.23, 0.23, 0.08])
     else:
         action = np.random.choice(ACTIONS, p=action_probs)
-        
+    
+    if self.train:
+        # record the teacher's action for imitation learning
+        teacher_action, _ = self.model.teacher.act(game_state)
+        self.model.teacher_action_history.append(teacher_action)
+        self.logger.info(f'Teacher action {teacher_action}')
     
     # record the action index
     self.model.action_history.append(ACTIONS.index(action))
