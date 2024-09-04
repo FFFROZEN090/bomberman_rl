@@ -73,7 +73,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     self.logger.info(f'Events: {events}')
 
     if len(self.replay_buffer) == self.batch_size:
-        self.model.train(self.replay_buffer, self.experience_buffer, self.batch_size, self.target_model)
+        self.model.dqn_train(self.replay_buffer, self.experience_buffer, self.batch_size, self.target_model)
 
         # Update the epoch
         self.model.epoch += 1
@@ -150,7 +150,7 @@ def end_of_round(self, last_game_state, last_action, events):
     self.logger.info(f'Events: {events}')
 
     if len(self.replay_buffer) == self.batch_size:
-        self.model.train(self.replay_buffer, self.experience_buffer, self.batch_size, self.target_model)
+        self.model.dqn_train(self.replay_buffer, self.experience_buffer, self.batch_size, self.target_model)
 
         # Update the epoch
         self.model.epoch += 1
@@ -166,7 +166,7 @@ def end_of_round(self, last_game_state, last_action, events):
 
     score = last_game_state['self'][1]
     
-    self.model.score = score
+    self.model.scores.append(score)
 
 
 
@@ -200,8 +200,8 @@ def reward_from_events(events) -> float:
         BOMB_DROPPED_FOR_CRATE: 1.0,
         
         e.KILLED_OPPONENT: 20.0,
-        e.GOT_KILLED: -2,
-        e.KILLED_SELF: -1,
+        e.GOT_KILLED: -1,
+        e.KILLED_SELF: -0.5,
         e.SURVIVED_ROUND: 10.0
     }
     reward = sum([game_rewards[event] for event in events])

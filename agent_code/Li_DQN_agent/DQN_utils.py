@@ -6,8 +6,6 @@ import os
 import torch
 import numpy as np
 
-
-
 """
 Converts the game state into a 17x17x14 numpy array representation.
 
@@ -155,7 +153,6 @@ Input:
 
 Return: A 10x17x17 high level state 
 """
-import numpy as np
 
 def check_danger_area(state, high_level_state, step):
     # Initialize a 9x9 grid for recording reachable cells
@@ -195,7 +192,7 @@ def check_danger_area(state, high_level_state, step):
                             reachable[i, j] = 0
                         else:
                             # Check for danger in reachable cells
-                            bomb_countdown = state[7:11, y, x]  # Channels 7-10 for bomb countdown
+                            bomb_countdown = state[7:10, y, x]  # Channels 7-10 for bomb countdown
                             if any(bomb_countdown == step):
                                 high_level_state[6 - 1 + step, y, x] = 1  # Mark as dangerous in the corresponding channel
 

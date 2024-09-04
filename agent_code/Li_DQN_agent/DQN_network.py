@@ -39,7 +39,7 @@ class DQN(nn.Module):
         self.exploration_prob = 1.0
 
         # Decay rate
-        self.decay_rate = 0.995
+        self.decay_rate = 0.99995
 
         # Learning rate
         self.learning_rate = 0.001
@@ -56,7 +56,7 @@ class DQN(nn.Module):
 
         self.wandb = True
 
-        self.score = 0
+        self.scores = []
 
         # Initialize wandb
         if self.wandb:
@@ -82,16 +82,12 @@ class DQN(nn.Module):
     def action(self, state):
         # If the player position is at coner [1,1], [1,15], [15,1], [15,15], take the following actions
         if state[0][1][1] == 1:
-            print("Corner 1,1")
             return 2 if np.random.rand() < 0.5 else 1
         elif state[0][1][15] == 1:
-            print("Corner 1,15")
             return 0 if np.random.rand() < 0.5 else 1
         elif state[0][15][1] == 1:
-            print("Corner 15,1")
             return 2 if np.random.rand() < 0.5 else 3
         elif state[0][15][15] == 1:
-            print("Corner 15,15")
             return 3 if np.random.rand() < 0.5 else 0
         elif np.random.rand() < self.exploration_prob:
             # Update the exploration probability
@@ -138,12 +134,16 @@ class DQN(nn.Module):
 
         return states, actions, rewards, next_states, dones
 
-    def train(self, replay_buffer, experience_buffer, batch_size, target_model = None, device='cpu'):
+    def dqn_train(self, replay_buffer, experience_buffer, batch_size, target_model = None, device='cpu'):
         # Sample experiences
         experiences = self.sample_experiences(replay_buffer, experience_buffer, batch_size)
         
         # Convert experiences to tensors using the new member function
         states, actions, rewards, next_states, dones = self.convert_experiences_to_tensors(experiences, device)
+
+        # Convert model weights to device
+        self.to(device)
+
 
         # Compute Q-values for current states
         current_q_values = self(states).gather(1, actions.unsqueeze(1)).squeeze(1) + 1e-9
@@ -154,6 +154,7 @@ class DQN(nn.Module):
             if target_model is None:
                 next_q_values = self(next_states).max(1)[0] + 1e-9
             elif target_model is not None:
+                target_model.to(device)
                 next_q_values = target_model(next_states).max(1)[0] + 1e-9
 
         target_q_values = rewards + (1 - dones.float()/batch_size) * self.gamma * next_q_values
@@ -179,7 +180,7 @@ class DQN(nn.Module):
                 "loss": loss.item(),
                 "epoch": self.epoch,
                 "exploration_prob": self.exploration_prob,
-                "score": self.score
+                "score": sum(self.scores) / len(self.scores)
             })
 
         # Restrict the exploration probability
@@ -322,5 +323,5 @@ def compute_td_loss(model, target_model, experiences, gamma=0.99, device='cpu'):
 
 
 if __name__ == "__main__":
-    model = DQN(14, 6)
-    summary(model, (14, 17, 17))
+    model = DQN(24, 6)
+    summary(model, (24, 17, 17))
