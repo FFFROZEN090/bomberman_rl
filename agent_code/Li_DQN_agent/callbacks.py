@@ -21,8 +21,8 @@ def setup(self):
     self.logger.info('Successfully entered setup code')
 
     # Setup the model
-    self.model = DQN(input_channels=24, output_size=6)
-    self.target_model = DQN(input_channels=24, output_size=6)
+    self.model = DQN(input_channels=14, output_size=6)
+    self.target_model = DQN(input_channels=14, output_size=6)
 
     # Store the last state and action
     self.last_state = None
@@ -63,7 +63,7 @@ def setup(self):
 def act(agent, game_state: dict):
     agent.logger.info('Choosing action based on current state.')
     # Get the current state representation
-    current_state = get_state(game_state)
+    current_state = get_low_level_state(game_state)
 
     # Use the model to choose an action
     action = agent.model.action(current_state)

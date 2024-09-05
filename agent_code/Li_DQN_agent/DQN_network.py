@@ -79,7 +79,7 @@ class DQN(nn.Module):
         return self.model(x)
 
 
-    def action(self, state):
+    def action(self, state, device='cpu'):
         # If the player position is at coner [1,1], [1,15], [15,1], [15,15], take the following actions
         if state[0][1][1] == 1:
             return 2 if np.random.rand() < 0.5 else 1
@@ -95,7 +95,8 @@ class DQN(nn.Module):
             return np.random.randint(self.output_size)
         else:
             with torch.no_grad():
-                input = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+                input = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(device)
+                self.to(device)
                 q_values = self.forward(input)
             return torch.argmax(q_values).item()
 

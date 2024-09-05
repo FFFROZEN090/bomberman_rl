@@ -48,10 +48,10 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     events = calculate_events(self, old_game_state, self_action, new_game_state, events)
 
     # Get DQN state
-    state = get_state(new_game_state)
+    state = get_low_level_state(new_game_state)
 
     # Get old state
-    old_state = get_state(old_game_state)
+    old_state = get_low_level_state(old_game_state)
 
     # Get reward
     reward = reward_from_events(events)
@@ -131,10 +131,10 @@ def end_of_round(self, last_game_state, last_action, events):
     self.logger.debug(f'Encountered game event(s) {", ".join([event for event in events])}')
 
     # Get DQN state
-    state = get_state(last_game_state)
+    state = get_low_level_state(last_game_state)
 
     # Get old state
-    old_state = get_state(last_game_state)
+    old_state = get_low_level_state(last_game_state)
 
     # Get reward
     reward = reward_from_events(events)
@@ -174,8 +174,8 @@ def reward_from_events(events) -> float:
     reward = 0
     game_rewards = {
         e.INVALID_ACTION: -0.05,
-        e.MOVED_LEFT: 0.1,
-        e.MOVED_RIGHT: 0.1,
+        e.MOVED_LEFT: 0.5,
+        e.MOVED_RIGHT: 0.5,
         e.MOVED_UP: 0.1,
         e.MOVED_DOWN: 0.1,
         e.WAITED: -0.1,
