@@ -20,7 +20,10 @@ BOMB_TIME2 = 'BOMB_TIME2' # 2 steps to explode
 BOMB_TIME3 = 'BOMB_TIME3' # 3 steps to explode
 BOMB_FARTHER = 'BOMB_FARTHER' # The agent is farther from the bomb
 # BOMB_TIME4 = 'BOMB_TIME4' # 4 steps to explode
+BOMB_DROPPED_AND_NO_SAFE_CELL = 'BOMB_DROPPED_AND_NO_SAFE_CELL' # The agent dropped a bomb and then there is no safe cell
+BOMB_DROPPED_AT_DEAD_ENDS = 'BOMB_DROPPED_AT_DEAD_ENDS' # The agent dropped a bomb at dead ends
 BOMB_DROPPED_FOR_CRATE = 'BOMB_DROPPED_FOR_CRATE' # Crates will be destroyed by the dropped bomb
+FALL_INTO_BOMB = 'FALL_INTO_BOMB' # The agent falls into the bomb range
 EXCAPE_FROM_BOMB = 'EXCAPE_FROM_BOMB'
 LOOP_DETECTED = 'LOOP_DETECTED'
 NEW_CELL_FOUND = 'NEW_CELL_FOUND' # The agent found a new cell
@@ -67,7 +70,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     # add position to visited history
     self.visited_history.append(new_game_state['self'][3])
     # check if the agent is in a loop, if so, add an event to events list
-    if self.visited_history.count(new_game_state['self'][3]) > 3:
+    if self.visited_history.count(new_game_state['self'][3]) >= 2 :
         events.append(LOOP_DETECTED)
     
     # distance to coins: if getting close to coins at the first time, add an event to events list
@@ -94,7 +97,11 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         events.append(BOMB_TIME2)
     elif bombs_time[new_game_state['self'][3]] == 3:
         events.append(BOMB_TIME3)
-
+    
+    
+    # If the agent dropped a bomb at the first step, add an event to events list
+    if self_action == 'BOMB' and old_game_state['self'][2] > 0 and old_game_state['self'][3] in [(1,1), (1,s.ROWS-2), (s.COLS-2,1), (s.COLS-2,s.ROWS-2)]:
+        events.append(BOMB_DROPPED_AND_NO_SAFE_CELL)
     
     # If the agent is farther from the bomb, add an event to events list
     if bombs_time[old_game_state['self'][3]] < 5:
@@ -109,11 +116,21 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                 if abs(xb - old_game_state['self'][3][0]) < abs(xb - new_game_state['self'][3][0]):
                     events.append(BOMB_FARTHER)
     
-        
-        
+    
+    arena = new_game_state['field']
+    # If the agent dropped a bomb at dead ends, add an event to events list
+    dead_ends = [(i, j) for i in range(s.COLS) for j in range(s.ROWS) if (arena[i, j] == 0)
+                    and ([arena[i + 1, j], arena[i - 1, j], arena[i, j + 1], arena[i, j - 1]].count(0) == 1)]
+    if self_action == 'BOMB' and old_game_state['self'][2] > 0 and new_game_state['self'][3] in dead_ends:
+        events.append(BOMB_DROPPED_AT_DEAD_ENDS)
+    
+    # If the agent falls into the bomb range from a safer zone, add an event to events list
+    if self_action != 'BOMB' and bombs_time[old_game_state['self'][3]] == 5 and bombs_time[new_game_state['self'][3]] < 5:
+        events.append(FALL_INTO_BOMB)
+    
     # If the agent dropped a bomb and crates will be destroyed, add an event to events list
     crates = old_game_state['field'] == 1
-    if self_action == 'BOMB':
+    if self_action == 'BOMB' and old_game_state['self'][2] > 0:
         for (i, j) in [(new_game_state['self'][3][0] + h, new_game_state['self'][3][1]) for h in range(-3, 4)] + [(new_game_state['self'][3][0], new_game_state['self'][3][1] + h) for h in range(-3, 4)]:
             if (0 < i < crates.shape[0]) and (0 < j < crates.shape[1]) and crates[i, j] and bombs_time[i, j] == 5:
                 events.append(BOMB_DROPPED_FOR_CRATE)
@@ -161,9 +178,11 @@ def end_of_round(self, last_game_state, last_action, events):
     if self.model.episode % 1000 == 0:
         save_path = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_'+ 
                           MODEL_TYPE + '_seq_' + str(SEQ_LEN) + '_layer_' + 
-                          str(N_LAYERS) + '_feature_' + str(FEATURE_DIM) + '_alpha_' + 
+                          str(N_LAYERS) + '_alpha_' + 
                           str(ALPHA) + '_' + str(self.model.episode) + '.pt')
         self.model.save(save_path)
+        
+    # print(f'The model has {self.model.count_parameters():,} parameters')
 
 
 def reward_from_events(events) -> float:
@@ -175,27 +194,30 @@ def reward_from_events(events) -> float:
         e.MOVED_UP: 0.1,
         e.MOVED_DOWN: 0.1,
         e.WAITED: -0.3,
-        e.BOMB_DROPPED: 0.1,
+        e.BOMB_DROPPED: -0.1,
         
-        LOOP_DETECTED: -0.1,
+        LOOP_DETECTED: -0.25,
         
         e.CRATE_DESTROYED: 0.05,
         e.COIN_FOUND: 0.3,
         COIN_CLOSE: 0.05,
         COIN_CLOSER: 0.25,
-        e.COIN_COLLECTED: 2,
+        e.COIN_COLLECTED: 4,
         
         BOMB_TIME3: -0.2,
         BOMB_TIME2: -0.3,
         BOMB_TIME1: -0.5,
-        EXCAPE_FROM_BOMB: 1,
+        FALL_INTO_BOMB: -0.5,
+        EXCAPE_FROM_BOMB: 0.8,
+        BOMB_DROPPED_AND_NO_SAFE_CELL: -0.5,
         BOMB_FARTHER: 0.3,
         e.BOMB_EXPLODED: 0,
         e.OPPONENT_ELIMINATED: 0,
         
         NEW_CELL_FOUND: 0.2,
         
-        BOMB_DROPPED_FOR_CRATE: 0.2,
+        BOMB_DROPPED_FOR_CRATE: 0.1,
+        BOMB_DROPPED_AT_DEAD_ENDS: 0.5,
         
         e.KILLED_OPPONENT: 5,
         e.GOT_KILLED: -10,
