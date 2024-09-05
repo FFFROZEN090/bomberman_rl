@@ -19,6 +19,9 @@ def setup(self):
     if MODEL_TYPE == 'FF':
         self.model = FFPolicy(feature_dim=FEATURE_DIM, action_dim=6, hidden_dim=128, seq_len=1, 
                               n_layers=N_LAYERS, alpha = ALPHA, episode=0, gamma=0.99, model_name=MODEL_NAME, WANDB=WANDB)
+    elif MODEL_TYPE == 'SFF':
+        self.model = SFFPolicy(feature_dim=FEATURE_DIM, action_dim=6, hidden_dim=128, seq_len=1, 
+                               n_layers=N_LAYERS, alpha = ALPHA, episode=0, gamma=0.99, model_name=MODEL_NAME, WANDB=WANDB)
     elif MODEL_TYPE == 'LSTM':
         self.model = LSTMPolicy(feature_dim=FEATURE_DIM, action_dim=6, hidden_dim=128, seq_len=SEQ_LEN, 
                                 n_layers=N_LAYERS, alpha = ALPHA, episode=0, gamma=0.99, model_name=MODEL_NAME, WANDB=WANDB)

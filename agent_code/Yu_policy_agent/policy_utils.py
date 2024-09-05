@@ -282,33 +282,33 @@ class BasePolicy(nn.Module):
         
         # merge all features
         if self.birth_corner == 0: # left top
-            features = np.array([up_feasible, down_feasible, left_feasible, right_feasible, wait_feasible, bomb_left,
-                                up_coins_score, down_coins_score, left_coins_score, right_coins_score,
-                                up_crates_score, down_crates_score, left_crates_score, right_crates_score,
-                                up_dead_ends_score, down_dead_ends_score, left_dead_ends_score, right_dead_ends_score,
-                                up_opponents_score, down_opponents_score, left_opponents_score, right_opponents_score,
-                                up_bomb_nearby, down_bomb_nearby, left_bomb_nearby, right_bomb_nearby])
+            features = np.array([up_feasible, right_feasible, down_feasible, left_feasible, wait_feasible, bomb_left,
+                                up_coins_score, right_coins_score, down_coins_score, left_coins_score, 
+                                up_crates_score, right_crates_score, down_crates_score, left_crates_score, 
+                                up_dead_ends_score, right_dead_ends_score, down_dead_ends_score, left_dead_ends_score,
+                                up_opponents_score, right_opponents_score, down_opponents_score, left_opponents_score,
+                                up_bomb_nearby, right_bomb_nearby, down_bomb_nearby, left_bomb_nearby])
         elif self.birth_corner == 1: # right top
-            features = np.array([up_feasible, down_feasible, right_feasible, left_feasible, wait_feasible, bomb_left,
-                                up_coins_score, down_coins_score, right_coins_score, left_coins_score,
-                                up_crates_score, down_crates_score, right_crates_score, left_crates_score,
-                                up_dead_ends_score, down_dead_ends_score, right_dead_ends_score, left_dead_ends_score,
-                                up_opponents_score, down_opponents_score, right_opponents_score, left_opponents_score,
-                                up_bomb_nearby, down_bomb_nearby, right_bomb_nearby, left_bomb_nearby])
+            features = np.array([up_feasible, left_feasible, down_feasible, right_feasible, wait_feasible, bomb_left,
+                                up_coins_score, left_coins_score, down_coins_score, right_coins_score,
+                                up_crates_score, left_crates_score, down_crates_score, right_crates_score, 
+                                up_dead_ends_score, left_dead_ends_score, down_dead_ends_score, right_dead_ends_score,
+                                up_opponents_score, left_opponents_score, down_opponents_score, right_opponents_score, 
+                                up_bomb_nearby, left_bomb_nearby, down_bomb_nearby, right_bomb_nearby])
         elif self.birth_corner == 2: # left bottom
-            features = np.array([down_feasible, up_feasible, left_feasible, right_feasible, wait_feasible, bomb_left,
-                                down_coins_score, up_coins_score, left_coins_score, right_coins_score,
-                                down_crates_score, up_crates_score, left_crates_score, right_crates_score,
-                                down_dead_ends_score, up_dead_ends_score, left_dead_ends_score, right_dead_ends_score,
-                                down_opponents_score, up_opponents_score, left_opponents_score, right_opponents_score,
-                                down_bomb_nearby, up_bomb_nearby, left_bomb_nearby, right_bomb_nearby])
+            features = np.array([down_feasible, right_feasible, up_feasible, left_feasible, wait_feasible, bomb_left,
+                                down_coins_score, right_coins_score, up_coins_score, left_coins_score,
+                                down_crates_score, right_crates_score, up_crates_score, left_crates_score,
+                                down_dead_ends_score, right_dead_ends_score, up_dead_ends_score, left_dead_ends_score,
+                                down_opponents_score, right_opponents_score, up_opponents_score, left_opponents_score,
+                                down_bomb_nearby, right_bomb_nearby, up_bomb_nearby, left_bomb_nearby])
         elif self.birth_corner == 3: # right bottom
-            features = np.array([down_feasible, up_feasible, right_feasible, left_feasible, wait_feasible, bomb_left,
-                                down_coins_score, up_coins_score, right_coins_score, left_coins_score,
-                                down_crates_score, up_crates_score, right_crates_score, left_crates_score,
-                                down_dead_ends_score, up_dead_ends_score, right_dead_ends_score, left_dead_ends_score,
-                                down_opponents_score, up_opponents_score, right_opponents_score, left_opponents_score,
-                                down_bomb_nearby, up_bomb_nearby, right_bomb_nearby, left_bomb_nearby])
+            features = np.array([down_feasible, left_feasible, up_feasible, right_feasible, wait_feasible, bomb_left,
+                                 down_coins_score, left_coins_score, up_coins_score, right_coins_score,
+                                 down_crates_score, left_crates_score, up_crates_score, right_crates_score,
+                                 down_dead_ends_score, left_dead_ends_score, up_dead_ends_score, right_dead_ends_score,
+                                 down_opponents_score, left_opponents_score, up_opponents_score, right_opponents_score,
+                                 down_bomb_nearby, left_bomb_nearby, up_bomb_nearby, right_bomb_nearby])
         else:
             raise ValueError("The birth corner is not determined.")
         
@@ -318,19 +318,21 @@ class BasePolicy(nn.Module):
     
     def getting_action_probs(self, x):
         def swap(x, i, j):
-            x[i], x[j] = x[j], x[i]
+            result = x.clone()
+            result[i] = x[j]
+            result[j] = x[i]
             return x
         # according to the forward output and self corner information, determine the action probabilities
         if self.birth_corner == 1: # right top
-            # swap the third and the fourth element of the output
-            x = swap(x, 2, 3)
+            # swap the second and the fourth element of the output
+            x = swap(x, 1, 3)
         elif self.birth_corner == 2: # left bottom
-            # swap the first and the second element of the output
-            x = swap(x, 0, 1)
+            # swap the first and the third element of the output
+            x = swap(x, 0, 2)
         elif self.birth_corner == 3: # right bottom
             # swap the output elements
-            x = swap(x, 0, 1)
-            x = swap(x, 2, 3)
+            x = swap(x, 0, 2)
+            x = swap(x, 1, 3)
         # normalize the output
         action_probs = F.softmax(x, dim=-1)
         
