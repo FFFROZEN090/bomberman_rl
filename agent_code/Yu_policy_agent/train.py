@@ -25,6 +25,7 @@ BOMB_DROPPED_AT_DEAD_ENDS = 'BOMB_DROPPED_AT_DEAD_ENDS' # The agent dropped a bo
 BOMB_DROPPED_FOR_CRATE = 'BOMB_DROPPED_FOR_CRATE' # Crates will be destroyed by the dropped bomb
 FALL_INTO_BOMB = 'FALL_INTO_BOMB' # The agent falls into the bomb range
 EXCAPE_FROM_BOMB = 'EXCAPE_FROM_BOMB'
+EXCAPE_FROM_BOMB_BY_CORNER = 'EXCAPE_FROM_BOMB_BY_CORNER' # The agent escapes from the bomb by turning around a corner
 LOOP_DETECTED = 'LOOP_DETECTED'
 NEW_CELL_FOUND = 'NEW_CELL_FOUND' # The agent found a new cell
 
@@ -110,11 +111,17 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             events.append(EXCAPE_FROM_BOMB)
         for (xb, yb), t in bombs:
             if xb == old_game_state['self'][3][0] and abs(yb - old_game_state['self'][3][1]) < 4:
+                # If the agent is farther from the bomb, add an event to events list
                 if abs(yb - old_game_state['self'][3][1]) < abs(yb - new_game_state['self'][3][1]):
                     events.append(BOMB_FARTHER)
+                # If the agent escapes from the bomb by turning around a corner, add an event to events list
+                if xb != new_game_state['self'][3][0] and yb != new_game_state['self'][3][1]:
+                    events.append(EXCAPE_FROM_BOMB_BY_CORNER)
             if yb == old_game_state['self'][3][1] and abs(xb - old_game_state['self'][3][0]) < 4:
                 if abs(xb - old_game_state['self'][3][0]) < abs(xb - new_game_state['self'][3][0]):
                     events.append(BOMB_FARTHER)
+                if xb != new_game_state['self'][3][0] and yb != new_game_state['self'][3][1]:
+                    events.append(EXCAPE_FROM_BOMB_BY_CORNER)
     
     
     arena = new_game_state['field']
@@ -174,8 +181,8 @@ def end_of_round(self, last_game_state, last_action, events):
     
     self.model.episode += 1
     
-    # Save model for every 1000 episodes
-    if self.model.episode % 1000 == 0:
+    # Save model for every 5000 episodes
+    if self.model.episode % 5000 == 0:
         save_path = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_'+ 
                           MODEL_TYPE + '_seq_' + str(SEQ_LEN) + '_layer_' + 
                           str(N_LAYERS) + '_alpha_' + 
@@ -208,13 +215,14 @@ def reward_from_events(events) -> float:
         BOMB_TIME2: -0.3,
         BOMB_TIME1: -0.5,
         FALL_INTO_BOMB: -0.5,
-        EXCAPE_FROM_BOMB: 0.8,
+        EXCAPE_FROM_BOMB: 0.5,
+        EXCAPE_FROM_BOMB_BY_CORNER: 0.3,
         BOMB_DROPPED_AND_NO_SAFE_CELL: -0.5,
         BOMB_FARTHER: 0.3,
         e.BOMB_EXPLODED: 0,
         e.OPPONENT_ELIMINATED: 0,
         
-        NEW_CELL_FOUND: 0.2,
+        NEW_CELL_FOUND: 0.3,
         
         BOMB_DROPPED_FOR_CRATE: 0.1,
         BOMB_DROPPED_AT_DEAD_ENDS: 0.5,
