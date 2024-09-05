@@ -59,6 +59,7 @@ class BasePolicy(nn.Module):
                 project="MLE_Bomberman",
                 config={
                     "architecture": self.name,
+                    "episode": self.episode,
                     # "feature_dim": self.feature_dim,
                     "action_dim": self.action_dim,
                     "hidden_dim": self.hidden_dim,
@@ -350,3 +351,6 @@ class BasePolicy(nn.Module):
             discounted_rewards = (discounted_rewards - discounted_rewards.mean()) / (discounted_rewards.std() + 1e-9)
         
         return discounted_rewards
+    
+    def count_parameters(self):
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
