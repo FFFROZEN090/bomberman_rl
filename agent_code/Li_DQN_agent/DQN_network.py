@@ -58,6 +58,9 @@ class DQN(nn.Module):
 
         self.scores = []
 
+        self.survived_rounds = []
+        self.rewards_list = []
+
         # Initialize wandb
         if self.wandb:
             wandb.init(
@@ -79,7 +82,7 @@ class DQN(nn.Module):
         return self.model(x)
 
 
-    def action(self, state, device='cpu'):
+    def action(self, state, device='cuda'):
         # If the player position is at coner [1,1], [1,15], [15,1], [15,15], take the following actions
         if state[0][1][1] == 1:
             return 2 if np.random.rand() < 0.5 else 1
@@ -135,7 +138,7 @@ class DQN(nn.Module):
 
         return states, actions, rewards, next_states, dones
 
-    def dqn_train(self, replay_buffer, experience_buffer, batch_size, target_model = None, device='cpu'):
+    def dqn_train(self, replay_buffer, experience_buffer, batch_size, target_model = None, device='cuda'):
         # Sample experiences
         experiences = self.sample_experiences(replay_buffer, experience_buffer, batch_size)
         
@@ -157,14 +160,12 @@ class DQN(nn.Module):
             elif target_model is not None:
                 target_model.to(device)
                 next_q_values = target_model(next_states).max(1)[0] + 1e-9
-
-        target_q_values = rewards + (1 - dones.float()/batch_size) * self.gamma * next_q_values
+        if rewards.sum() < 0:
+            target_q_values = 0 + (1 - dones.float()/batch_size) * self.gamma * next_q_values
+        else:
+            target_q_values = rewards + (1 - dones.float()/batch_size) * self.gamma * next_q_values
         # For done states, the target Q-value is equal to the reward
         target_q_values[dones] = rewards[dones]
-
-        # Normalize the target Q-values and  current Q-values
-        target_q_values = (target_q_values - target_q_values.mean()) / target_q_values.std()
-        current_q_values = (current_q_values - current_q_values.mean()) / current_q_values.std()
 
         # Compute loss
         loss = nn.MSELoss()(current_q_values, target_q_values)
@@ -179,23 +180,36 @@ class DQN(nn.Module):
                 "sum of target Q-values": target_q_values.sum(),
                 "sum of current Q-values": current_q_values.sum(),
                 "loss": loss.item(),
-                "epoch": self.epoch,
                 "exploration_prob": self.exploration_prob,
-                "score": sum(self.scores) / len(self.scores)
+                "score": sum(self.scores) / len(self.scores),
+                "survived_rounds": sum(self.survived_rounds) / len(self.survived_rounds)
             })
+        self.rewards_list.append(rewards.sum().to('cpu').detach().numpy())
+        # Clear scores and survived rounds
+        self.scores = []
+        self.survived_rounds = []
 
         # Restrict the exploration probability
         self.exploration_prob = max(self.exploration_prob * self.decay_rate, 0.1)
 
-        # If after 100 epochs, save the model
-        if self.epoch % 100 == 0:
-            if not os.path.exists(os.path.join(os.path.dirname(__file__), 'checkpoints')):
-                os.mkdir(os.path.join(os.path.dirname(__file__), 'checkpoints'))
-            self.save(os.path.join(os.path.dirname(__file__), 'checkpoints', 'Li_DQN_agent' + '_' + str(self.epoch) + '.' + 'pt'))
-
+        if self.epoch % 10 == 0:
             if target_model is not None:
                 # Copy Parameters from the model to the target model
                 target_model.load_state_dict(self.state_dict())
+        
+        if self.epoch % 20 == 0 and self.epoch != 0:
+            if is_downstream_trend(self.rewards_list):
+                # Uptune exploration probability by 0.1
+                self.exploration_prob = max(self.exploration_prob + 0.1, 1.0)
+                # Reset rewards
+                self.rewards_list = []
+
+
+        # If after 100 epochs, save the model
+        if self.epoch % 50 == 0:
+            if not os.path.exists(os.path.join(os.path.dirname(__file__), 'checkpoints')):
+                os.mkdir(os.path.join(os.path.dirname(__file__), 'checkpoints'))
+            self.save(os.path.join(os.path.dirname(__file__), 'checkpoints', 'Li_DQN_agent' + '_' + str(self.epoch) + '.' + 'pt'))
 
             # Upload the model to wandb
             if self.wandb:
@@ -320,7 +334,26 @@ def compute_td_loss(model, target_model, experiences, gamma=0.99, device='cpu'):
     return loss
 
 
+def is_downstream_trend(data: list) -> bool:
+    """
+    Check if the data (list of PyTorch tensors) follows a general downstream (decreasing) trend.
     
+    :param data: List of PyTorch tensors (could be on GPU)
+    :return: True if the list follows a general downstream trend, False otherwise
+    """
+    
+    # Edge case: If the data has less than 2 points, we consider it as a downstream trend
+    if len(data) <= 1:
+        return True
+
+    # Create an array of indices for x (time or position)
+    x = np.arange(len(data))
+    
+    # Perform a linear regression (fit a line to the data)
+    slope, intercept = np.polyfit(x, data, 1)
+    
+    # Check if the slope is negative, indicating a downward trend
+    return slope < 0
 
 
 if __name__ == "__main__":

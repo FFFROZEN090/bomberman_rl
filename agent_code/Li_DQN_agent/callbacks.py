@@ -8,7 +8,7 @@ from .DQN_network import DQN, ExperienceDataset, ReplayBuffer
 
 
 EXPERIENCE_BUFFER_SIZE = 1000000
-REPLAY_BUFFER_SIZE = 8000
+REPLAY_BUFFER_SIZE = 2000
 
 MODEL_NAME = 'Li_DQN_agent'
 LAST_EPISODE = 100
@@ -41,6 +41,8 @@ def setup(self):
     self.batch_size = REPLAY_BUFFER_SIZE
 
     self.max_rounds = 20000
+
+    self.surving_rounds = 0
 
     if self.train:
         if not os.path.exists(MODEL_PATH):

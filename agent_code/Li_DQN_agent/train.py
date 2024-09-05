@@ -80,11 +80,13 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
         self.replay_buffer.clear()
 
+    self.surving_rounds += 1
+
 def calculate_events(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[dict]) -> List[dict]:
     # add position to visited history
     self.visited_history.append(new_game_state['self'][3])
     # check if the agent is in a loop, if so, add an event to events list
-    if self.visited_history.count(new_game_state['self'][3]) > 2:
+    if self.visited_history.count(new_game_state['self'][3]) > 3:
         events.append(LOOP_DETECTED)
     
     # distance to coins: if getting close to coins, add an event to events list
@@ -102,14 +104,6 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
         for (i, j) in [(xb + h, yb) for h in range(-3, 4)] + [(xb, yb + h) for h in range(-3, 4)]:
             if (0 < i < bombs_time.shape[0]) and (0 < j < bombs_time.shape[1]):
                 bombs_time[i, j] = min(bombs_time[i, j], t)
-    if bombs_time[new_game_state['self'][3]] == 1:
-        events.append(BOMB_TIME1)
-    elif bombs_time[new_game_state['self'][3]] == 2:
-        events.append(BOMB_TIME2)
-    elif bombs_time[new_game_state['self'][3]] == 3:
-        events.append(BOMB_TIME3)
-    elif bombs_time[new_game_state['self'][3]] == 4:
-        events.append(BOMB_TIME4)
         
     # If the agent was in danger zone but now safe, add an event to events list
     if bombs_time[old_game_state['self'][3]] < 5 and bombs_time[new_game_state['self'][3]] == 5:
@@ -168,43 +162,70 @@ def end_of_round(self, last_game_state, last_action, events):
     
     self.model.scores.append(score)
 
+    survived_rounds = self.surving_rounds
+    self.surving_rounds = 0
+    self.model.survived_rounds.append(survived_rounds)
 
 
 def reward_from_events(events) -> float:
     reward = 0
     game_rewards = {
-        e.INVALID_ACTION: -0.05,
-        e.MOVED_LEFT: 0.5,
-        e.MOVED_RIGHT: 0.5,
-        e.MOVED_UP: 0.1,
-        e.MOVED_DOWN: 0.1,
+        e.INVALID_ACTION: -0.5,
+        e.MOVED_LEFT: 5.0,
+        e.MOVED_RIGHT: 5.0,
+        e.MOVED_UP: 2.0,
+        e.MOVED_DOWN: 2.0,
         e.WAITED: -0.1,
-        e.BOMB_DROPPED: 1.0,
-        e.OPPONENT_ELIMINATED: 0.00,
+        e.BOMB_DROPPED: 5.0,
+        e.OPPONENT_ELIMINATED: 10.00,
         
         LOOP_DETECTED: -0.5,
         
-        e.CRATE_DESTROYED: 1.0,
+        e.CRATE_DESTROYED: 10.0,
         e.COIN_FOUND: 10.0,
-        COIN_CLOSE: 0.1,
-        COIN_CLOSER: 0.3,
-        e.COIN_COLLECTED: 2.0,
+        COIN_CLOSE: 10.0,
+        COIN_CLOSER: 20.0,
+        e.COIN_COLLECTED: 100.0,
         
-        BOMB_TIME4: 0.4,
-        BOMB_TIME3: 0.3,
-        BOMB_TIME2: 0.2,
-        BOMB_TIME1: 0.1,
-        EXCAPE_FROM_BOMB:10.0,
-        e.BOMB_EXPLODED: 0.5,
+        EXCAPE_FROM_BOMB: 10.0,
+        e.BOMB_EXPLODED: 1.0,
         
-        BOMB_DROPPED_FOR_CRATE: 1.0,
+        BOMB_DROPPED_FOR_CRATE: 5.0,
         
-        e.KILLED_OPPONENT: 20.0,
-        e.GOT_KILLED: -1,
-        e.KILLED_SELF: -0.5,
+        e.KILLED_OPPONENT: 500.0,
+        e.GOT_KILLED: -100,
+        e.KILLED_SELF: -5,
         e.SURVIVED_ROUND: 10.0
     }
     reward = sum([game_rewards[event] for event in events])
+
+    # Punish for joint event
+    joint_event_penalties = {
+        (e.WAITED, LOOP_DETECTED): -1.0,
+        (e.INVALID_ACTION, LOOP_DETECTED): -1.0,
+        (e.BOMB_DROPPED, e.INVALID_ACTION): -1.0,
+        (e.BOMB_DROPPED, e.WAITED): -1.0,
+        (e.GOT_KILLED, e.KILLED_SELF): +100.0,
+        (e.SURVIVED_ROUND, LOOP_DETECTED): -100.0,
+        (e.MOVED_RIGHT, EXCAPE_FROM_BOMB): 20.0,
+        (e.MOVED_LEFT, EXCAPE_FROM_BOMB): 20.0,
+        (e.MOVED_UP, EXCAPE_FROM_BOMB): 5.0,
+        (e.MOVED_DOWN, EXCAPE_FROM_BOMB): 5.0,
+        (e.MOVED_RIGHT, COIN_CLOSE): 3.0,
+        (e.MOVED_LEFT, COIN_CLOSE): 3.0,
+        (e.MOVED_UP, COIN_CLOSE): 3.0,
+        (e.MOVED_DOWN, COIN_CLOSE): 3.0,
+        (e.MOVED_RIGHT, COIN_CLOSER): 5.0,
+        (e.MOVED_LEFT, COIN_CLOSER): 5.0,
+        (e.MOVED_UP, COIN_CLOSER): 5.0,
+        (e.MOVED_DOWN, COIN_CLOSER): 5.0,
+    }
+
+        # Check if joint events occur and apply penalties
+    for joint_event, penalty in joint_event_penalties.items():
+        if all(event in events for event in joint_event):
+            reward += penalty
+
     
     return reward
 
