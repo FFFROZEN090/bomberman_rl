@@ -11,6 +11,13 @@ from .policy_utils import *
 from .policy_model import *
 from .config import *
 
+if TEST_MODE:
+    WANDB = False
+    PRINT_INFO = True
+else:
+    WANDB = True
+    PRINT_INFO = False
+
 def setup(self):
     np.random.seed()
     self.logger.info('Successfully entered setup code')
@@ -47,27 +54,12 @@ def setup(self):
 
 def act(self, game_state) -> str:
     # This is the main function that the agent calls to get an action
-    action_probs = self.model.forward(game_state=game_state)
+    action_probs = self.model.forward(game_state=game_state, print_info=PRINT_INFO)
     action_probs = action_probs.detach().numpy()
     # print(action_probs.shape)
 
     # Behavioral cloning if training and episode < TEACH_EPISODE
-    # if self.train and self.model.episode < TEACH_EPISODE:
-    #     action, _ = self.teacher.act(game_state)
-    #     self.logger.info(f'Behavior cloning action: {action}')
-    #     self.logger.info(f'Predicted cloning action probabilities: {action_probs[ACTIONS.index(action)]}')
-    # else:
-    if np.isnan(action_probs).any():
-        self.logger.info('Action probabilities contain NaN values')
-        action = np.random.choice(['RIGHT', 'LEFT', 'UP', 'DOWN', 'BOMB'], p=[0.23, 0.23, 0.23, 0.23, 0.08])
-    else:
-        action = np.random.choice(ACTIONS, p=action_probs)
-    
-    if self.train:
-        # record the teacher's action for imitation learning
-        teacher_action, _ = self.model.teacher.act(game_state)
-        self.model.teacher_action_history.append(teacher_action)
-        self.logger.info(f'Teacher action {teacher_action}')
+    action = np.random.choice(ACTIONS, p=action_probs)
     
     # record the action index
     self.model.action_history.append(ACTIONS.index(action))

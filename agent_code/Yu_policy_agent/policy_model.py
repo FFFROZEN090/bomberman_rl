@@ -36,7 +36,7 @@ class FFPolicy(BasePolicy):
             )
 
 
-    def forward(self, game_state = None, index = None):
+    def forward(self, game_state = None, index = None, print_info = False):
         if index is None:
             # record the teacher's action for imitation learning
             teacher_action, _ = self.teacher.act(game_state)
@@ -52,8 +52,13 @@ class FFPolicy(BasePolicy):
             x = F.relu(fc(x))
         x = self.fc2(x)
         
-        action_probs = self.getting_action_probs(x)
         
+        action_probs = self.getting_action_probs(x)
+        if print_info:
+            print('The state features are: ', game_state_features, 'at the step ', game_state['step'])
+            print('The birth corner is: ', self.birth_corner)
+            print('The output of action is: ', x)
+            print('The action probabilities are: ', action_probs)
         return action_probs
 
     def train(self):
@@ -147,7 +152,7 @@ class SFFPolicy(BasePolicy):
         right = self.movement_net(torch.index_select(game_state_features, 0, indices+1))
         down = self.movement_net(torch.index_select(game_state_features, 0, indices+2))
         left = self.movement_net(torch.index_select(game_state_features, 0, indices+3))
-        
+        # bomb_indices = torch.tensor([])
         wait = self.wait_net(game_state_features)
         bomb = self.bomb_net(game_state_features)
         
