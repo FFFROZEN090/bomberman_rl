@@ -5,13 +5,14 @@ import os
 import numpy as np
 from .DQN_utils import get_state, get_low_level_state, get_high_level_state
 from .DQN_network import DQN, ExperienceDataset, ReplayBuffer
+import logging
 
 
-EXPERIENCE_BUFFER_SIZE = 1000000
+EXPERIENCE_BUFFER_SIZE = 5000000
 REPLAY_BUFFER_SIZE = 2000
 
 MODEL_NAME = 'Li_DQN_agent'
-LAST_EPISODE = 100
+LAST_EPISODE = 10650
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_' + str(LAST_EPISODE) + '.pt')
@@ -22,6 +23,7 @@ def setup(self):
 
     # Setup the model
     self.model = DQN(input_channels=14, output_size=6)
+    self.model.epoch = LAST_EPISODE
     self.target_model = DQN(input_channels=14, output_size=6)
 
     # Store the last state and action
@@ -44,6 +46,10 @@ def setup(self):
 
     self.surving_rounds = 0
 
+    # Set a action buffer with size 10
+    self.action_buffer = []
+    self.action_buffer_size = 10
+
     if self.train:
         if not os.path.exists(MODEL_PATH):
             self.model.init_parameters()
@@ -53,7 +59,7 @@ def setup(self):
         elif os.path.exists(MODEL_PATH):
             self.model.load(MODEL_PATH)
             self.target_model.load(MODEL_PATH)
-            self.model.exploration_prob = 0.1
+            self.model.exploration_prob = 0.3
             self.logger.info('Model for training loaded')
     else:
         self.model.load(MODEL_PATH)
@@ -72,5 +78,12 @@ def act(agent, game_state: dict):
 
     # Convert the action index to the corresponding action string
     action_string = ACTIONS[action]
+
+    # Store action in action buffer
+    if len(agent.action_buffer) > agent.action_buffer_size:
+        agent.action_buffer.pop(0)
+    agent.action_buffer.append(action_string)
+
+    agent.logger.info(f'Agent Action: {action_string}')
 
     return action_string
