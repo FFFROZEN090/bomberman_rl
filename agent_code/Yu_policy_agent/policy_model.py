@@ -147,7 +147,7 @@ class SFFPolicy(BasePolicy):
         else:
             game_state_features = self.game_state_history[index]
         
-        indices = torch.tensor([0, 6, 10, 14, 18, 22])
+        indices = torch.tensor([0, 6, 10, 14, 18, 22, 26])
         up = self.movement_net(torch.index_select(game_state_features, 0, indices))
         right = self.movement_net(torch.index_select(game_state_features, 0, indices+1))
         down = self.movement_net(torch.index_select(game_state_features, 0, indices+2))

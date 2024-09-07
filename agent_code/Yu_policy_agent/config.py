@@ -6,7 +6,7 @@ MODEL_TYPE = 'FF' # 'FF' or 'SFF' or 'LSTM' or 'PPO'
 SEQ_LEN = 1 # Sequence length for LSTM
 N_LAYERS = 2 # Number of layers for FF or LSTM
 LAST_EPISODE = 0 # Last episode number
-ALPHA = 0 # Weight for imitation learning loss
+ALPHA = 0.2 # Weight for imitation learning loss
 
 FEATURE_DIM = 30 # 30 for full dimension, 18 excluded dead ends and 14 excluded crates
 

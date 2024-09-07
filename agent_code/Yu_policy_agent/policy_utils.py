@@ -278,15 +278,15 @@ class BasePolicy(nn.Module):
         for (xb, yb), t in bombs:
             if xb == self_pos[0] and abs(yb-self_pos[1]) < 4:
                 # if the bomb is in the same column and no wall in between the bomb and the agent
-                up_bomb_distance = (yb-self_pos[1]) if yb >= self_pos[1] and arena[xb, yb-1] != -1 else 0
-                down_bomb_distance = (self_pos[1]-yb) if yb <= self_pos[1] and arena[xb, yb+1] != -1 else 0
-                up_bomb_time = t if yb >= self_pos[1] and arena[xb, yb-1] != -1 else 0
-                down_bomb_time = t if yb <= self_pos[1] and arena[xb, yb+1] != -1 else 0
+                up_bomb_distance = 1/(1+yb-self_pos[1]) if yb >= self_pos[1] and arena[xb, yb-1] != -1 else 0
+                down_bomb_distance = 1/(1+self_pos[1]-yb) if yb <= self_pos[1] and arena[xb, yb+1] != -1 else 0
+                up_bomb_time = 1/(1+t) if yb >= self_pos[1] and arena[xb, yb-1] != -1 else 0
+                down_bomb_time = 1/(1+t) if yb <= self_pos[1] and arena[xb, yb+1] != -1 else 0
             if yb == self_pos[1] and abs(xb-self_pos[0]) < 4:
-                left_bomb_distance = (xb-self_pos[0]) if xb >= self_pos[0] and arena[xb-1, yb] != -1 else 0
-                right_bomb_distance = (self_pos[0]-xb) if xb <= self_pos[0] and arena[xb+1, yb] != -1 else 0
-                left_bomb_time = t if xb >= self_pos[0] and arena[xb-1, yb] != -1 else 0
-                right_bomb_time = t if xb <= self_pos[0] and arena[xb+1, yb] != -1 else 0
+                left_bomb_distance = 1/(1+xb-self_pos[0]) if xb >= self_pos[0] and arena[xb-1, yb] != -1 else 0
+                right_bomb_distance = 1/(1+self_pos[0]-xb) if xb <= self_pos[0] and arena[xb+1, yb] != -1 else 0
+                left_bomb_time = 1/(1+t) if xb >= self_pos[0] and arena[xb-1, yb] != -1 else 0
+                right_bomb_time = 1/(1+t) if xb <= self_pos[0] and arena[xb+1, yb] != -1 else 0
         
         
         

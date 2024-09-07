@@ -224,7 +224,7 @@ def reward_from_events(events) -> float:
         e.WAITED: -0.3,
         e.BOMB_DROPPED: -0.1,
         
-        LOOP_DETECTED: -0.5,
+        LOOP_DETECTED: -0.3,
         
         e.CRATE_DESTROYED: 0.2,
         e.COIN_FOUND: 0.3,
