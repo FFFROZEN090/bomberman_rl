@@ -24,16 +24,16 @@ def setup(self):
     
     # Choose a model architecture and hyperparameters according to the arugments passed to the agent
     if MODEL_TYPE == 'FF':
-        self.model = FFPolicy(feature_dim=FEATURE_DIM, action_dim=6, hidden_dim=128, seq_len=1, 
+        self.model = FFPolicy(feature_dim=FEATURE_DIM, action_dim=6, hidden_dim=HIDDEN_DIM, seq_len=1, 
                               n_layers=N_LAYERS, alpha = ALPHA, episode=0, gamma=0.99, model_name=MODEL_NAME, WANDB=WANDB)
     elif MODEL_TYPE == 'SFF':
-        self.model = SFFPolicy(feature_dim=FEATURE_DIM, action_dim=6, hidden_dim=128, seq_len=1, 
+        self.model = SFFPolicy(feature_dim=FEATURE_DIM, action_dim=6, hidden_dim=HIDDEN_DIM, seq_len=1, 
                                n_layers=N_LAYERS, alpha = ALPHA, episode=0, gamma=0.99, model_name=MODEL_NAME, WANDB=WANDB)
     elif MODEL_TYPE == 'LSTM':
-        self.model = LSTMPolicy(feature_dim=FEATURE_DIM, action_dim=6, hidden_dim=128, seq_len=SEQ_LEN, 
+        self.model = LSTMPolicy(feature_dim=FEATURE_DIM, action_dim=6, hidden_dim=HIDDEN_DIM, seq_len=SEQ_LEN, 
                                 n_layers=N_LAYERS, alpha = ALPHA, episode=0, gamma=0.99, model_name=MODEL_NAME, WANDB=WANDB)
     elif MODEL_TYPE == 'PPO':
-        self.model = PPOPolicy(feature_dim=FEATURE_DIM, action_dim=6, hidden_dim=128, episode=0, gamma=0.99, model_name=MODEL_NAME, WANDB=WANDB)
+        self.model = PPOPolicy(feature_dim=FEATURE_DIM, action_dim=6, hidden_dim=HIDDEN_DIM, episode=0, gamma=0.99, model_name=MODEL_NAME, WANDB=WANDB)
     
     # Create a game state history for the agent
     # self.opponent_history = deque([], 5) # save the last 5 actions of the opponents

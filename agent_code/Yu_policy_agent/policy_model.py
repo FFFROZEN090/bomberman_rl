@@ -27,16 +27,7 @@ class FFPolicy(BasePolicy):
         
         self.init_optimizer()
 
-        # Initialize wandb
-        if self.WANDB:
-            wandb.init(
-                config={
-                    "architecture": "FFPolicy"
-                }
-            )
-
-
-    def forward(self, game_state = None, index = None, print_info = False):
+    def forward(self, game_state = None, index = None, print_info = False, teacher_acting = False):
         if index is None:
             # record the teacher's action for imitation learning
             teacher_action, _ = self.teacher.act(game_state)
@@ -52,64 +43,17 @@ class FFPolicy(BasePolicy):
             x = F.relu(fc(x))
         x = self.fc2(x)
         
-        
         action_probs = self.getting_action_probs(x)
         if print_info:
             print('The state features are: ', game_state_features, 'at the step ', game_state['step'])
             print('The birth corner is: ', self.birth_corner)
             print('The output of action is: ', x)
             print('The action probabilities are: ', action_probs)
+        if teacher_acting:
+            teacher_action_idx = ACTIONS.index(teacher_action)
+            action_probs = torch.zeros(self.action_dim)
+            action_probs[teacher_action_idx] = 1
         return action_probs
-
-    def train(self):
-        total_loss = 0
-        total_teacher_loss = 0
-        total_policy_loss = 0
-        
-        discounted_rewards = self.getting_discounted_rewards(standadised=True)
-        
-        # Training loop for each step
-        if len(self.rewards) == len(self.action_history) == len(self.game_state_history) == len(self.action_probs):
-            steps = len(self.rewards)
-        else:
-            steps = len(self.rewards)-1
-            
-        for t in range(steps):
-            rewards = discounted_rewards[t]
-            
-            # Calculate action probabilities
-            action_prob = F.softmax(self.forward(index=t), dim=0)
-            
-            # Calculate the imitation learning loss (cross-entropy loss between teacher's action and agent's action)
-            teacher_action_idx = ACTIONS.index(self.teacher_action_history[t])
-            teacher_action_prob = torch.zeros(self.action_dim)
-            teacher_action_prob[teacher_action_idx] = 1
-            teacher_loss = F.cross_entropy(action_prob, teacher_action_prob)
-            
-            # Calculate the RL loss
-            log_prob = torch.log(action_prob + 1e-9)[self.action_history[t]] # add a small epsilon to avoid log(0)
-            policy_loss = -log_prob * rewards
-            
-            # combine the two losses
-            total_loss += policy_loss* (1-self.alpha) + teacher_loss*self.alpha
-            total_policy_loss += policy_loss
-            total_teacher_loss += teacher_loss
-            # print("The percentage of teacher loss is: ", teacher_loss/loss)
-                
-        
-        self.optimizer.zero_grad()
-        total_loss.backward()
-        # Gradient clipping
-        torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
-        self.optimizer.step()
-        
-        self.final_rewards.append(sum(self.rewards))
-        self.final_discounted_rewards.append(discounted_rewards[0])
-        self.loss_values.append(total_loss.item()/steps)
-        self.teacher_loss.append(total_teacher_loss.item()/steps)
-        self.policy_loss.append(total_policy_loss.item()/steps)
-        self.survival_time.append(steps)
-
 
 # Specific FF policy
 class SFFPolicy(BasePolicy):
@@ -136,7 +80,7 @@ class SFFPolicy(BasePolicy):
         self.init_optimizer()
 
 
-    def forward(self, game_state = None, index = None):
+    def forward(self, game_state = None, index = None, print_info = False):
         if index is None:
             # record the teacher's action for imitation learning
             teacher_action, _ = self.teacher.act(game_state)
@@ -158,59 +102,14 @@ class SFFPolicy(BasePolicy):
         
         # combine the six actions into one vector
         x = torch.stack((up, right, down, left, wait, bomb), dim=0).squeeze()
-        # print('The output of action is: ', x)
+        
         action_probs = self.getting_action_probs(x)
-        # print('The action probabilities are: ', action_probs)
+        if print_info:
+            print('The state features are: ', game_state_features, 'at the step ', game_state['step'])
+            print('The birth corner is: ', self.birth_corner)
+            print('The output of action is: ', x)
+            print('The action probabilities are: ', action_probs)
         return action_probs
-
-    def train(self):
-        total_loss = 0
-        total_teacher_loss = 0
-        total_policy_loss = 0
-        
-        discounted_rewards = self.getting_discounted_rewards(standadised=True)
-        
-        # Training loop for each step
-        if len(self.rewards) == len(self.action_history) == len(self.game_state_history) == len(self.action_probs):
-            steps = len(self.rewards)
-        else:
-            steps = len(self.rewards)-1
-            
-        for t in range(steps):
-            rewards = discounted_rewards[t]
-            
-            # Calculate action probabilities
-            action_prob = F.softmax(self.forward(index=t), dim=0)
-            
-            # Calculate the imitation learning loss (cross-entropy loss between teacher's action and agent's action)
-            teacher_action_idx = ACTIONS.index(self.teacher_action_history[t])
-            teacher_action_prob = torch.zeros(self.action_dim)
-            teacher_action_prob[teacher_action_idx] = 1
-            teacher_loss = F.cross_entropy(action_prob, teacher_action_prob)
-            
-            # Calculate the RL loss
-            log_prob = torch.log(action_prob + 1e-9)[self.action_history[t]] # add a small epsilon to avoid log(0)
-            policy_loss = -log_prob * rewards
-            
-            # combine the two losses
-            total_loss += policy_loss* (1-self.alpha) + teacher_loss*self.alpha
-            total_policy_loss += policy_loss
-            total_teacher_loss += teacher_loss
-            # print("The percentage of teacher loss is: ", teacher_loss/loss)
-                
-        
-        self.optimizer.zero_grad()
-        total_loss.backward()
-        # Gradient clipping
-        torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
-        self.optimizer.step()
-        
-        self.final_rewards.append(sum(self.rewards))
-        self.final_discounted_rewards.append(discounted_rewards[0])
-        self.loss_values.append(total_loss.item()/steps)
-        self.teacher_loss.append(total_teacher_loss.item()/steps)
-        self.policy_loss.append(total_policy_loss.item()/steps)
-        self.survival_time.append(steps)
 
 
 # LSTM policy
@@ -232,7 +131,7 @@ class LSTMPolicy(BasePolicy):
         self.init_optimizer()
         
 
-    def forward(self, game_state = None, index=None):
+    def forward(self, game_state = None, index=None, print_info = False):
         if index is None:
             # record the teacher's action for imitation learning
             teacher_action, _ = self.teacher.act(game_state)
@@ -260,63 +159,12 @@ class LSTMPolicy(BasePolicy):
         x = self.fc(x[:, -1, :]).squeeze()
         action_probs = self.getting_action_probs(x)
         
+        if print_info:
+            print('The state features are: ', game_state_features, 'at the step ', game_state['step'])
+            print('The birth corner is: ', self.birth_corner)
+            print('The output of action is: ', x)
+            print('The action probabilities are: ', action_probs)
         return action_probs
-
-    def train(self):
-        total_loss = 0
-        total_teacher_loss = 0
-        total_policy_loss = 0
-        
-        discounted_rewards = self.getting_discounted_rewards(standadised=True)
-        
-        # Training loop
-        if len(self.rewards) == len(self.action_history) == len(self.game_state_history) == len(self.action_probs):
-            steps = len(self.rewards)
-        else:
-            steps = len(self.rewards) - 1
-        
-        for t in range(steps):
-            # if self.teacher_action_history[t] != "WAIT":
-                rewards = discounted_rewards[t] # current steps' and future steps' rewards
-                action_probs = self.forward(index=t)
-                
-                # Calculate the imitation learning loss (cross-entropy loss between teacher's action and agent's action)
-                teacher_action_idx = ACTIONS.index(self.teacher_action_history[t])
-                
-                # print("At step ", t, "the teacher action is ", self.teacher_action_history[t], " and the agent action is ", 
-                    #   ACTIONS[torch.argmax(action_prob)], "with the probability of " , 
-                    #   torch.max(action_prob).item())
-                
-                teacher_action_prob = torch.zeros(self.action_dim)
-                teacher_action_prob[teacher_action_idx] = 1
-                teacher_loss = F.cross_entropy(action_probs, teacher_action_prob)
-                
-                # Calculate the RL loss
-                log_prob = torch.log(action_probs + 1e-9)[self.action_history[t]]
-                policy_loss = -log_prob * rewards
-                # print("The action ", ACTIONS[self.action_history[t]], " has the log probability of ", log_prob.item(), " and the reward is ", rewards)
-                
-                # combine the two losses
-                total_loss += policy_loss* (1-self.alpha) + teacher_loss*self.alpha
-                total_policy_loss += policy_loss
-                total_teacher_loss += teacher_loss
-                # print("The percentage of teacher loss is: ", teacher_loss/loss)
-                
-        
-        self.optimizer.zero_grad()
-        total_loss.backward()
-        # Gradient clipping
-        torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
-        self.optimizer.step()
-        
-        self.final_rewards.append(sum(self.rewards))
-        self.final_discounted_rewards.append(discounted_rewards[0])
-        self.loss_values.append(total_loss.item()/steps)
-        self.teacher_loss.append(total_teacher_loss.item()/steps)
-        self.policy_loss.append(total_policy_loss.item()/steps)
-        self.survival_time.append(steps)
-
-        
         
 
 # TODO: Fix the Actor-Critic Proximal policy

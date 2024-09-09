@@ -30,6 +30,7 @@ class BasePolicy(nn.Module):
         self.state_seqs = []
         self.hidden = None
         self.birth_corner = None # 0: left top, 1: right top, 2: left bottom, 3: right bottom
+        self.bomb_dropped = 0
         
         # parameters for saving and loading the model
         self.checkpoint_dir = os.path.join(os.getcwd(), 'checkpoints')
@@ -47,6 +48,8 @@ class BasePolicy(nn.Module):
         self.final_discounted_rewards = []
         self.scores = []
         self.survival_time = []
+        self.bomb_dropped_history = []
+        self.scoring_efficiency = []
         
         # teacher model for imitation learning
         self.teacher = TeacherModel()
@@ -92,6 +95,9 @@ class BasePolicy(nn.Module):
             'final_rewards': self.final_rewards,
             'final_discounted_rewards': self.final_discounted_rewards,
             'scores': self.scores,
+            'survival_time': self.survival_time,
+            'bomb_dropped_history': self.bomb_dropped_history,
+            'scoring_efficiency': self.scoring_efficiency,
             'model_state_dict': self.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict()
         }
@@ -121,6 +127,12 @@ class BasePolicy(nn.Module):
             self.final_rewards = checkpoint['final_rewards']
             self.final_discounted_rewards = checkpoint['final_discounted_rewards']
             self.scores = checkpoint['scores']
+            self.alpha = checkpoint['alpha']
+            
+            self.seq_len = checkpoint['seq_len']
+            self.bomb_dropped_history = checkpoint['bomb_dropped_history']
+            self.survival_time = checkpoint['survival_time']
+            self.scoring_efficiency = checkpoint['scoring_efficiency']
             print('Model loaded from', path)
         else:
             print('No model found at', path)
@@ -141,7 +153,33 @@ class BasePolicy(nn.Module):
         self.rewards.clear()
         self.action_probs.clear()
         self.birth_corner = None
-      
+        self.bomb_dropped = 0
+    
+    def train(self):
+        discounted_rewards = self.getting_discounted_rewards(standadised=True)
+        
+        # Get steps
+        if len(self.rewards) == len(self.action_history) == len(self.game_state_history) == len(self.action_probs):
+            steps = len(self.rewards)
+        else:
+            steps = len(self.rewards)-1
+        
+        total_loss, total_teacher_loss, total_policy_loss = self.getting_loss(steps=steps, discounted_rewards=discounted_rewards)
+        
+        self.optimizer.zero_grad()
+        total_loss.backward()
+        # Gradient clipping
+        torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
+        self.optimizer.step()
+        
+        self.final_rewards.append(sum(self.rewards))
+        self.final_discounted_rewards.append(discounted_rewards[0])
+        self.loss_values.append(total_loss.item()/steps)
+        self.teacher_loss.append(total_teacher_loss.item()/steps)
+        self.policy_loss.append(total_policy_loss.item()/steps)
+        self.survival_time.append(steps)
+        self.bomb_dropped_history.append(self.bomb_dropped)
+        self.scoring_efficiency.append(self.scores[-1]/steps)
 
     def state_to_features(self, game_state: dict) -> torch.Tensor:
         # This is a function that converts the game state to the input of your model
@@ -267,29 +305,51 @@ class BasePolicy(nn.Module):
         
         # 3. Life-saving features: bomb nearby, explosion nearby
         # Features 3.1. determine the distance to the bomb
-        up_bomb_distance = 0
-        down_bomb_distance = 0
-        left_bomb_distance = 0
-        right_bomb_distance = 0
-        up_bomb_time = 0
-        down_bomb_time = 0
-        left_bomb_time = 0
-        right_bomb_time = 0
+        up_bomb1_distance = 5
+        down_bomb1_distance = 5
+        left_bomb1_distance = 5
+        right_bomb1_distance = 5
+        up_bomb1_time = 5
+        down_bomb1_time = 5
+        left_bomb1_time = 5
+        right_bomb1_time = 5
+        up_bomb1_safe = 1
+        down_bomb1_safe = 1
+        left_bomb1_safe = 1
+        right_bomb1_safe = 1
         for (xb, yb), t in bombs:
-            if xb == self_pos[0] and abs(yb-self_pos[1]) < 4:
-                # if the bomb is in the same column and no wall in between the bomb and the agent
-                up_bomb_distance = 1/(1+yb-self_pos[1]) if yb >= self_pos[1] and arena[xb, yb-1] != -1 else 0
-                down_bomb_distance = 1/(1+self_pos[1]-yb) if yb <= self_pos[1] and arena[xb, yb+1] != -1 else 0
-                up_bomb_time = 1/(1+t) if yb >= self_pos[1] and arena[xb, yb-1] != -1 else 0
-                down_bomb_time = 1/(1+t) if yb <= self_pos[1] and arena[xb, yb+1] != -1 else 0
-            if yb == self_pos[1] and abs(xb-self_pos[0]) < 4:
-                left_bomb_distance = 1/(1+xb-self_pos[0]) if xb >= self_pos[0] and arena[xb-1, yb] != -1 else 0
-                right_bomb_distance = 1/(1+self_pos[0]-xb) if xb <= self_pos[0] and arena[xb+1, yb] != -1 else 0
-                left_bomb_time = 1/(1+t) if xb >= self_pos[0] and arena[xb-1, yb] != -1 else 0
-                right_bomb_time = 1/(1+t) if xb <= self_pos[0] and arena[xb+1, yb] != -1 else 0
-        
-        
-        
+            if abs(yb-self_pos[1]) + abs(xb-self_pos[0]) < 5:
+                # if the bomb is around a wall, then the agent could hide behind
+                # initialize the safety information
+                up_bomb1_safe = 0
+                down_bomb1_safe = 0
+                left_bomb1_safe = 0
+                right_bomb1_safe = 0
+                # determine the safety information
+                # the bomb is on the right side of the wall and the agent is on the left side of the wall 
+                if arena[xb-1, yb] == -1 and self_pos[0] < xb: 
+                    up_bomb1_safe = 1
+                    down_bomb1_safe = 1
+                if arena[xb+1, yb] == -1 and self_pos[0] > xb:
+                    up_bomb1_safe = 1
+                    down_bomb1_safe = 1
+                if arena[xb, yb-1] == -1 and self_pos[1] < yb:
+                    left_bomb1_safe = 1
+                    right_bomb1_safe = 1
+                if arena[xb, yb+1] == -1 and self_pos[1] > yb:
+                    left_bomb1_safe = 1
+                    right_bomb1_safe = 1          
+                
+                up_bomb1_distance = min(up_bomb1_distance, abs(yb-self_pos[1])) if yb < self_pos[1] else up_bomb1_distance
+                down_bomb1_distance = min(down_bomb1_distance, abs(yb-self_pos[1])) if yb > self_pos[1] else down_bomb1_distance
+                left_bomb1_distance = min(left_bomb1_distance, abs(xb-self_pos[0])) if xb < self_pos[0] else left_bomb1_distance
+                right_bomb1_distance = min(right_bomb1_distance, abs(xb-self_pos[0])) if xb > self_pos[0] else right_bomb1_distance
+                up_bomb1_time = min(up_bomb1_time, t) if yb < self_pos[1] else up_bomb1_time
+                down_bomb1_time = min(down_bomb1_time, t) if yb > self_pos[1] else down_bomb1_time
+                left_bomb1_time = min(left_bomb1_time, t) if xb < self_pos[0] else left_bomb1_time
+                right_bomb1_time = min(right_bomb1_time, t) if xb > self_pos[0] else right_bomb1_time
+                
+                        
         
         # merge all features
         if self.birth_corner == 0: # left top
@@ -298,32 +358,36 @@ class BasePolicy(nn.Module):
                                 up_crates_score, right_crates_score, down_crates_score, left_crates_score, 
                                 up_dead_ends_score, right_dead_ends_score, down_dead_ends_score, left_dead_ends_score,
                                 up_opponents_score, right_opponents_score, down_opponents_score, left_opponents_score,
-                                up_bomb_distance, right_bomb_distance, down_bomb_distance, left_bomb_distance,
-                                up_bomb_time, right_bomb_time, down_bomb_time, left_bomb_time])
+                                up_bomb1_distance, right_bomb1_distance, down_bomb1_distance, left_bomb1_distance,
+                                up_bomb1_time, right_bomb1_time, down_bomb1_time, left_bomb1_time,
+                                up_bomb1_safe, right_bomb1_safe, down_bomb1_safe, left_bomb1_safe])
         elif self.birth_corner == 1: # left bottom
             features = np.array([down_feasible, right_feasible, up_feasible, left_feasible, wait_feasible, bomb_left,
                                 down_coins_score, right_coins_score, up_coins_score, left_coins_score,
                                 down_crates_score, right_crates_score, up_crates_score, left_crates_score,
                                 down_dead_ends_score, right_dead_ends_score, up_dead_ends_score, left_dead_ends_score,
                                 down_opponents_score, right_opponents_score, up_opponents_score, left_opponents_score,
-                                down_bomb_distance, right_bomb_distance, up_bomb_distance, left_bomb_distance,
-                                down_bomb_time, right_bomb_time, up_bomb_time, left_bomb_time])
+                                down_bomb1_distance, right_bomb1_distance, up_bomb1_distance, left_bomb1_distance,
+                                down_bomb1_time, right_bomb1_time, up_bomb1_time, left_bomb1_time,
+                                down_bomb1_safe, right_bomb1_safe, up_bomb1_safe, left_bomb1_safe])
         elif self.birth_corner == 2: # right top
             features = np.array([up_feasible, left_feasible, down_feasible, right_feasible, wait_feasible, bomb_left,
                                 up_coins_score, left_coins_score, down_coins_score, right_coins_score,
                                 up_crates_score, left_crates_score, down_crates_score, right_crates_score, 
                                 up_dead_ends_score, left_dead_ends_score, down_dead_ends_score, right_dead_ends_score,
                                 up_opponents_score, left_opponents_score, down_opponents_score, right_opponents_score, 
-                                up_bomb_distance, left_bomb_distance, down_bomb_distance, right_bomb_distance,
-                                up_bomb_time, left_bomb_time, down_bomb_time, right_bomb_time])
+                                up_bomb1_distance, left_bomb1_distance, down_bomb1_distance, right_bomb1_distance,
+                                up_bomb1_time, left_bomb1_time, down_bomb1_time, right_bomb1_time,
+                                up_bomb1_safe, left_bomb1_safe, down_bomb1_safe, right_bomb1_safe])
         elif self.birth_corner == 3: # right bottom
             features = np.array([down_feasible, left_feasible, up_feasible, right_feasible, wait_feasible, bomb_left,
                                  down_coins_score, left_coins_score, up_coins_score, right_coins_score,
                                  down_crates_score, left_crates_score, up_crates_score, right_crates_score,
                                  down_dead_ends_score, left_dead_ends_score, up_dead_ends_score, right_dead_ends_score,
                                  down_opponents_score, left_opponents_score, up_opponents_score, right_opponents_score,
-                                 down_bomb_distance, left_bomb_distance, up_bomb_distance, right_bomb_distance,
-                                 down_bomb_time, left_bomb_time, up_bomb_time, right_bomb_time])
+                                 down_bomb1_distance, left_bomb1_distance, up_bomb1_distance, right_bomb1_distance,
+                                 down_bomb1_time, left_bomb1_time, up_bomb1_time, right_bomb1_time,
+                                 down_bomb1_safe, left_bomb1_safe, up_bomb1_safe, right_bomb1_safe])
         else:
             raise ValueError("The birth corner is not determined.")
         
@@ -368,6 +432,39 @@ class BasePolicy(nn.Module):
             discounted_rewards = (discounted_rewards - discounted_rewards.mean()) / (discounted_rewards.std() + 1e-9)
         
         return discounted_rewards
+    
+    def getting_loss(self, steps, discounted_rewards):
+        total_loss = 0
+        total_teacher_loss = 0
+        total_policy_loss = 0
+            
+        for t in range(steps):
+            rewards = discounted_rewards[t]
+            
+            # Calculate action probabilities
+            action_prob = F.softmax(self.forward(index=t), dim=0)
+            
+            # Calculate the imitation learning loss (cross-entropy loss between teacher's action and agent's action)
+            if self.teacher_action_history[t] is not None:
+                teacher_action_idx = ACTIONS.index(self.teacher_action_history[t])
+            else:
+                teacher_action_idx = 5 # WAIT action
+                print('The teacher action is None at step ', t)
+            teacher_action_prob = torch.zeros(self.action_dim)
+            teacher_action_prob[teacher_action_idx] = 1
+            teacher_loss = F.cross_entropy(action_prob, teacher_action_prob)
+            
+            total_teacher_loss += teacher_loss
+            
+            # Calculate the RL loss
+            log_prob = torch.log(action_prob)[self.action_history[t]] # add a small epsilon to avoid log(0)
+            policy_loss = -log_prob * rewards
+            
+            total_policy_loss += policy_loss
+            
+            total_loss += teacher_loss*self.alpha + policy_loss*(1-self.alpha)
+            
+        return total_loss, total_teacher_loss, total_policy_loss
     
     def count_parameters(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)

@@ -39,5 +39,5 @@ Test code for task 1-4 in Main.py, if you want to show, just delete "--no-gui" i
 - Task 1: `python main.py play --no-gui --agents Yu_policy_agent --train 1 --scenario coin-heaven --n-round 10000`
 - Task 2: `python main.py play --no-gui --agents Yu_policy_agent --train 1 --scenario loot-crate --n-round 10000`
 - Task 3: `python main.py play --no-gui --agents Yu_policy_agent --train 1 --scenario classic --n-round 10000`
-- Task 4: `python main.py play --no-gui --agents Yu_policy_agent rule_based_agent --train 1--scenario classic --n-round 10000`
+- Task 4: `python main.py play --no-gui --my-agent Yu_policy_agent --train 1--scenario classic --n-round 10000`
 
