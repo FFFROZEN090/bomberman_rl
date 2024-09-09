@@ -38,6 +38,7 @@ ESCAPE_FROM_BOMB = 'ESCAPE_FROM_BOMB'
 ESCAPE_FROM_BOMB_BY_CORNER = 'ESCAPE_FROM_BOMB_BY_CORNER' # The agent escapes from the bomb by turning around a corner
 LOOP_DETECTED = 'LOOP_DETECTED'
 NEW_CELL_FOUND = 'NEW_CELL_FOUND' # The agent found a new cell
+STAY_IN_SAFE_ZONE = 'STAY_IN_SAFE_ZONE' # The agent keeps in the safe zone
 
 
 
@@ -117,7 +118,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     
     
     # If the agent dropped a bomb at the first step, add an event to events list
-    if self_action == 'BOMB' and old_game_state['self'][2] > 0 and old_game_state['self'][3] in [(1,1), (1,s.ROWS-2), (s.COLS-2,1), (s.COLS-2,s.ROWS-2)]:
+    if 'BOMB_DROPPED' in events and old_game_state['self'][3] in [(1,1), (1,s.ROWS-2), (s.COLS-2,1), (s.COLS-2,s.ROWS-2)]:
         events.append(BOMB_DROPPED_AND_NO_SAFE_CELL)
     
     # If the agent is farther from the bomb, add an event to events list
@@ -139,6 +140,10 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                 if xb != new_game_state['self'][3][0] and yb != new_game_state['self'][3][1]:
                     events.append(ESCAPE_FROM_BOMB_BY_CORNER)
     
+    if bombs_time[new_game_state['self'][3]] == 5 and old_game_state['step'] >= 30:
+        # If the agent is in a safe zone, add an event to events list
+        events.append(STAY_IN_SAFE_ZONE)
+        
     # If the agent is close to a bomb but fall in a safe cell, add an reward for waiting until the bomb explodes
     for (xb, yb), t in bombs:
         if np.abs(np.array(new_game_state['self'][3]) - np.array([xb, yb])).sum() < 4 and bombs_time[old_game_state['self'][3]] == 5 and 'WAITED' in events:
@@ -148,7 +153,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     # If the agent dropped a bomb at dead ends, add an event to events list
     dead_ends = [(i, j) for i in range(s.COLS) for j in range(s.ROWS) if (arena[i, j] == 0)
                     and ([arena[i + 1, j], arena[i - 1, j], arena[i, j + 1], arena[i, j - 1]].count(0) == 1)]
-    if self_action == 'BOMB' and old_game_state['self'][2] > 0 and new_game_state['self'][3] in dead_ends:
+    if 'BOMB_DROPPED' in events and old_game_state['self'][2] > 0 and new_game_state['self'][3] in dead_ends:
         events.append(BOMB_DROPPED_AT_DEAD_ENDS)
     
     # If the agent falls into the bomb range from a safer zone, add an event to events list
@@ -157,11 +162,13 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     
     # If the agent dropped a bomb and crates will be destroyed, add an event to events list
     crates = old_game_state['field'] == 1
-    if self_action == 'BOMB' and old_game_state['self'][2] > 0:
+    if 'BOMB_DROPPED' in events:
         for (i, j) in [(new_game_state['self'][3][0] + h, new_game_state['self'][3][1]) for h in range(-3, 4)] + [(new_game_state['self'][3][0], new_game_state['self'][3][1] + h) for h in range(-3, 4)]:
             if (0 < i < crates.shape[0]) and (0 < j < crates.shape[1]) and crates[i, j] and bombs_time[i, j] == 5:
                 events.append(BOMB_DROPPED_FOR_CRATE)
-                
+        
+        # add a bomb record
+        self.model.bomb_dropped += 1
     
     #self.logger.info(f'Events: ',{" ,"}.join([event for event in events]))
     self.logger.info(f'Events: {events}')
@@ -183,6 +190,9 @@ def end_of_round(self, last_game_state, last_action, events):
     self.logger.info(f'Rewards: {self.model.final_rewards[-1]}')
     self.logger.info(f'Discounted rewards: {self.model.final_discounted_rewards[-1]}')
     self.logger.info(f'Scores: {self.model.scores[-1]}')
+    self.logger.info(f'Survival time: {self.model.survival_time[-1]}')
+    self.logger.info(f'Bomb dropped: {self.model.bomb_dropped_history[-1]}')
+    self.logger.info(f'Scoring efficiency: {self.model.scoring_efficiency[-1]}')
     
     # Log metrics to wandb
     if WANDB:
@@ -194,7 +204,8 @@ def end_of_round(self, last_game_state, last_action, events):
             "discounted_reward": self.model.final_discounted_rewards[-1],
             "score": self.model.scores[-1],
             "survival_time": self.model.survival_time[-1],
-            "birth_corner": self.model.birth_corner
+            "bomb_dropped": self.model.bomb_dropped_history[-1],
+            "scoring_efficiency": self.model.scoring_efficiency[-1]
         })
     
     # Reset the model
@@ -221,10 +232,10 @@ def reward_from_events(events) -> float:
         e.MOVED_RIGHT: 0.1,
         e.MOVED_UP: 0.1,
         e.MOVED_DOWN: 0.1,
-        e.WAITED: -0.3,
-        e.BOMB_DROPPED: -0.1,
+        e.WAITED: -0.2,
+        e.BOMB_DROPPED: 0.1,
         
-        LOOP_DETECTED: -0.5,
+        LOOP_DETECTED: -0.3,
         
         e.CRATE_DESTROYED: 0.2,
         e.COIN_FOUND: 0.3,
@@ -236,12 +247,13 @@ def reward_from_events(events) -> float:
         BOMB_TIME3: -0.2,
         BOMB_TIME2: -0.3,
         BOMB_TIME1: -0.5,
-        FALL_INTO_BOMB: -0.5,
+        FALL_INTO_BOMB: -0.8,
         ESCAPE_FROM_BOMB: 0.5,
-        ESCAPE_FROM_BOMB_BY_CORNER: 0.3,
+        ESCAPE_FROM_BOMB_BY_CORNER: 0.5,
         WAIT_UNTIL_BOMB_EXPLODE: 0.5,
+        STAY_IN_SAFE_ZONE: 0.05,
         BOMB_DROPPED_AND_NO_SAFE_CELL: -0.8,
-        BOMB_FARTHER: 0.3,
+        BOMB_FARTHER: 0.5,
         e.BOMB_EXPLODED: 0,
         e.OPPONENT_ELIMINATED: 0,
         
