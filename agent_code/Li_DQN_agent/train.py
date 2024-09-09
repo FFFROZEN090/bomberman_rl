@@ -73,7 +73,6 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     self.logger.info(f'Events: {events}')
 
     if len(self.replay_buffer) == self.batch_size:
-        self.model.action_buffer = self.action_buffer
         self.model.dqn_train(self.replay_buffer, self.experience_buffer, self.batch_size, self.target_model)
 
         # Update the epoch
@@ -167,7 +166,6 @@ def end_of_round(self, last_game_state, last_action, events):
     self.logger.info(f'Events: {events}')
 
     if len(self.replay_buffer) == self.batch_size:
-        self.model.action_buffer = self.action_buffer
         self.model.dqn_train(self.replay_buffer, self.experience_buffer, self.batch_size, self.target_model)
 
         # Update the epoch
@@ -199,13 +197,13 @@ def end_of_round(self, last_game_state, last_action, events):
 def reward_from_events(events) -> float:
     reward = 0
     game_rewards = {
-        e.INVALID_ACTION: -0.8,
+        e.INVALID_ACTION: -2.0,
         e.MOVED_LEFT: 15.0,
         e.MOVED_RIGHT: 15.0,
-        e.MOVED_UP: 10.0,
-        e.MOVED_DOWN: 10.0,
-        e.WAITED: -0.5,
-        e.BOMB_DROPPED: 30.0,
+        e.MOVED_UP: 15.0,
+        e.MOVED_DOWN: 15.0,
+        e.WAITED: -1.5,
+        e.BOMB_DROPPED: 5.0,
         e.OPPONENT_ELIMINATED: 10.00,
         
         LOOP_DETECTED: -5.0,
@@ -223,7 +221,7 @@ def reward_from_events(events) -> float:
         
         e.KILLED_OPPONENT: 1000.0,
         e.GOT_KILLED: -10,
-        e.KILLED_SELF: -5,
+        e.KILLED_SELF: -30,
         e.SURVIVED_ROUND: 10.0,
 
         # Events for Repeat Actions
@@ -238,27 +236,32 @@ def reward_from_events(events) -> float:
 
     # Punish for joint event
     joint_event_penalties = {
-        (e.WAITED, LOOP_DETECTED): -30.0,
-        (e.WAITED, LOOP_DETECTED, 'WAIT_REPEAT'): -50,
-        (e.INVALID_ACTION, LOOP_DETECTED): -15.0,
-        (e.INVALID_ACTION, LOOP_DETECTED, 'UP_REPEAT'): -50,
-        (e.INVALID_ACTION, LOOP_DETECTED, 'DOWN_REPEAT'): -50,
-        (e.INVALID_ACTION, LOOP_DETECTED, 'LEFT_REPEAT'): -50,
-        (e.INVALID_ACTION, LOOP_DETECTED, 'RIGHT_REPEAT'): -50,
+        (e.WAITED, LOOP_DETECTED): -55.0,
+        (e.WAITED, LOOP_DETECTED, 'WAIT_REPEAT'): -45,
+        (e.INVALID_ACTION, LOOP_DETECTED): -55.0,
+        (e.INVALID_ACTION, LOOP_DETECTED, 'UP_REPEAT'): -40,
+        (e.INVALID_ACTION, LOOP_DETECTED, 'DOWN_REPEAT'): -40,
+        (e.INVALID_ACTION, LOOP_DETECTED, 'LEFT_REPEAT'): -40,
+        (e.INVALID_ACTION, LOOP_DETECTED, 'RIGHT_REPEAT'): -40,
         (e.INVALID_ACTION, LOOP_DETECTED, 'BOMB_REPEAT'): -100,
         (e.GOT_KILLED, e.KILLED_SELF): +100.0,
-        (e.MOVED_RIGHT, EXCAPE_FROM_BOMB): 20.0,
-        (e.MOVED_LEFT, EXCAPE_FROM_BOMB): 20.0,
-        (e.MOVED_UP, EXCAPE_FROM_BOMB): 10.0,
-        (e.MOVED_DOWN, EXCAPE_FROM_BOMB): 10.0,
-        (e.MOVED_RIGHT, COIN_CLOSE): 5.0,
-        (e.MOVED_LEFT, COIN_CLOSE): 5.0,
-        (e.MOVED_UP, COIN_CLOSE): 5.0,
-        (e.MOVED_DOWN, COIN_CLOSE): 5.0,
-        (e.MOVED_RIGHT, COIN_CLOSER): 10.0,
-        (e.MOVED_LEFT, COIN_CLOSER): 10.0,
-        (e.MOVED_UP, COIN_CLOSER): 10.0,
-        (e.MOVED_DOWN, COIN_CLOSER): 10.0,
+        (e.MOVED_RIGHT, EXCAPE_FROM_BOMB): 40.0,
+        (e.MOVED_LEFT, EXCAPE_FROM_BOMB): 40.0,
+        (e.MOVED_UP, EXCAPE_FROM_BOMB): 40.0,
+        (e.MOVED_DOWN, EXCAPE_FROM_BOMB): 40.0,
+        (e.MOVED_RIGHT, COIN_CLOSE): 15.0,
+        (e.MOVED_LEFT, COIN_CLOSE): 15.0,
+        (e.MOVED_UP, COIN_CLOSE): 15.0,
+        (e.MOVED_DOWN, COIN_CLOSE): 15.0,
+        (e.MOVED_RIGHT, COIN_CLOSER): 20.0,
+        (e.MOVED_LEFT, COIN_CLOSER): 20.0,
+        (e.MOVED_UP, COIN_CLOSER): 20.0,
+        (e.MOVED_DOWN, COIN_CLOSER): 20.0,
+        (e.MOVED_RIGHT, LOOP_DETECTED): 3.0,
+        (e.MOVED_LEFT, LOOP_DETECTED): 3.0,
+        (e.MOVED_UP, LOOP_DETECTED): 3.0,
+        (e.MOVED_DOWN, LOOP_DETECTED): 3.0,
+        (e.BOMB_DROPPED, LOOP_DETECTED): 2.0,
     }
 
     # Check if joint events occur and apply penalties

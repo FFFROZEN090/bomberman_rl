@@ -12,7 +12,7 @@ EXPERIENCE_BUFFER_SIZE = 5000000
 REPLAY_BUFFER_SIZE = 2000
 
 MODEL_NAME = 'Li_DQN_agent'
-LAST_EPISODE = 10650
+LAST_EPISODE = 10750
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_' + str(LAST_EPISODE) + '.pt')
@@ -78,11 +78,6 @@ def act(agent, game_state: dict):
 
     # Convert the action index to the corresponding action string
     action_string = ACTIONS[action]
-
-    # Store action in action buffer
-    if len(agent.action_buffer) > agent.action_buffer_size:
-        agent.action_buffer.pop(0)
-    agent.action_buffer.append(action_string)
 
     agent.logger.info(f'Agent Action: {action_string}')
 

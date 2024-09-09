@@ -64,6 +64,7 @@ class DQN(nn.Module):
         self.survived_rounds = []
         self.rewards_list = []
         self.action_buffer = []
+        self.action_buffer_size = 10
         self.best_score = 0
 
         # Initialize wandb
@@ -88,20 +89,30 @@ class DQN(nn.Module):
         return self.model(x)
 
 
-    def action(self, state, device='cpu'):
+    def action(self, state, device='cuda'):
         # If the player position is at coner [1,1], [1,15], [15,1], [15,15], take the following actions
         if state[0][1][1] == 1:
-            return 2 if np.random.rand() < 0.5 else 1
+            action_code = 2 if np.random.rand() < 0.5 else 1
+            update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
+            return action_code
         elif state[0][1][15] == 1:
-            return 0 if np.random.rand() < 0.5 else 1
+            action_code = 3 if np.random.rand() < 0.5 else 1
+            update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
+            return action_code
         elif state[0][15][1] == 1:
-            return 2 if np.random.rand() < 0.5 else 3
+            action_code = 2 if np.random.rand() < 0.5 else 0
+            update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
+            return action_code
         elif state[0][15][15] == 1:
-            return 3 if np.random.rand() < 0.5 else 0
+            action_code = 3 if np.random.rand() < 0.5 else 0
+            update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
+            return action_code
         elif np.random.rand() < self.exploration_prob:
             # Update the exploration probability
             self.exploration_prob *= self.decay_rate
-            return np.random.randint(self.output_size)
+            action_code = np.random.randint(0, self.output_size)
+            update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
+            return action_code
         else:
             with torch.no_grad():
                 input = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(device)
@@ -149,8 +160,12 @@ class DQN(nn.Module):
                         q_values[0][3] = q_values[0][3] * 1.2
                         q_values[0][4] = q_values[0][4] * 1.1
                     # Decrease the life_time of all repeat action
-                    return torch.argmax(q_values).item()
-                return torch.argmax(q_values).item()
+                    action_code = torch.argmax(q_values).item()
+                    update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
+                    return action_code
+                action_code = torch.argmax(q_values).item()
+                update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
+                return action_code
 
 
 
@@ -188,7 +203,7 @@ class DQN(nn.Module):
 
         return states, actions, rewards, next_states, dones
 
-    def dqn_train(self, replay_buffer, experience_buffer, batch_size, target_model = None, device='cpu'):
+    def dqn_train(self, replay_buffer, experience_buffer, batch_size, target_model = None, device='cuda'):
         # Sample experiences
         experiences = self.sample_experiences(replay_buffer, experience_buffer, batch_size)
         
@@ -216,6 +231,11 @@ class DQN(nn.Module):
         if target_q_values.sum() < 0:
             self.exploration_prob = min(self.exploration_prob + 0.1, 1.0)
 
+        # Rescale target Q-values and current Q-values to [0,1]
+        target_q_values = (target_q_values - target_q_values.min()) / ((target_q_values.max() - target_q_values.min()) + 1e-9)
+        current_q_values = (current_q_values - current_q_values.min()) / ((current_q_values.max() - current_q_values.min()) + 1e-9)
+
+
         # Compute loss
         loss = nn.HuberLoss()(current_q_values, target_q_values)
 
@@ -234,10 +254,6 @@ class DQN(nn.Module):
                 "survived_rounds": sum(self.survived_rounds) / len(self.survived_rounds)
             })
         self.rewards_list.append(rewards.sum().to('cpu').detach().numpy())
-        if self.best_score < sum(self.scores) / len(self.scores):
-            self.best_score = sum(self.scores) / len(self.scores)
-            if target_model is not None:
-                target_model.load_state_dict(self.state_dict())
 
 
         if self.epoch % 20 == 0:
@@ -369,6 +385,12 @@ class DQNLoss(nn.Module):
         loss = F.smooth_l1_loss(q_values, expected_q_values)
 
         return loss
+    
+def update_action_buffer(action_buffer: List, action: str, action_buffer_size: int) -> List:
+    action_buffer.append(action)
+    if len(action_buffer) > action_buffer_size:
+        action_buffer.pop(0)
+    return action_buffer
 
 def repeat_action(action_buffer: List, action_buffer_size: int) -> int:
     if len(action_buffer) >= action_buffer_size:
@@ -388,7 +410,7 @@ def repeat_action(action_buffer: List, action_buffer_size: int) -> int:
     return -1
 
 
-def compute_td_loss(model, target_model, experiences, gamma=0.99, device='cpu'):
+def compute_td_loss(model, target_model, experiences, gamma=0.99, device='cuda'):
     states = torch.FloatTensor([exp.agent_state for exp in experiences]).to(device)
     actions = torch.LongTensor([exp.action for exp in experiences]).to(device)
     rewards = torch.FloatTensor([exp.reward for exp in experiences]).to(device)
