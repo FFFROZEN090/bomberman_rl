@@ -42,16 +42,17 @@ def setup_training(self):
 # TODO: Verify the game event, update the model, reward, experience
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[dict]) -> None:
     self.logger.debug(f'Encountered game event(s) {", ".join([event for event in events])}')
+
     # print agent position
     self.logger.info(f'Agent position: {new_game_state["self"][3]}')
     
     events = calculate_events(self, old_game_state, self_action, new_game_state, events)
 
     # Get DQN state
-    state = get_low_level_state(new_game_state)
+    state = get_low_level_state(new_game_state, rotate=self.rotate)
 
     # Get old state
-    old_state = get_low_level_state(old_game_state)
+    old_state = get_low_level_state(old_game_state, self.rotate)
 
     # Get reward
     reward = reward_from_events(events)
@@ -147,10 +148,10 @@ def end_of_round(self, last_game_state, last_action, events):
     self.logger.debug(f'Encountered game event(s) {", ".join([event for event in events])}')
 
     # Get DQN state
-    state = get_low_level_state(last_game_state)
+    state = get_low_level_state(last_game_state, rotate=self.rotate)
 
     # Get old state
-    old_state = get_low_level_state(last_game_state)
+    old_state = get_low_level_state(last_game_state, rotate=self.rotate)
 
     # Get reward
     reward = reward_from_events(events)
@@ -173,7 +174,7 @@ def end_of_round(self, last_game_state, last_action, events):
 
         self.replay_buffer.clear()
 
-        # Reset last reward
+    # Reset last reward
     self.last_reward = None
     self.last_game_state = None
     self.last_state = None
@@ -198,12 +199,12 @@ def reward_from_events(events) -> float:
     reward = 0
     game_rewards = {
         e.INVALID_ACTION: -2.0,
-        e.MOVED_LEFT: 15.0,
-        e.MOVED_RIGHT: 15.0,
-        e.MOVED_UP: 15.0,
-        e.MOVED_DOWN: 15.0,
+        e.MOVED_LEFT: 20.0,
+        e.MOVED_RIGHT: 20.0,
+        e.MOVED_UP: 20.0,
+        e.MOVED_DOWN: 20.0,
         e.WAITED: -1.5,
-        e.BOMB_DROPPED: 5.0,
+        e.BOMB_DROPPED: 10.0,
         e.OPPONENT_ELIMINATED: 10.00,
         
         LOOP_DETECTED: -5.0,
@@ -217,7 +218,7 @@ def reward_from_events(events) -> float:
         EXCAPE_FROM_BOMB: 50.0,
         e.BOMB_EXPLODED: 10.0,
         
-        BOMB_DROPPED_FOR_CRATE: 20.0,
+        BOMB_DROPPED_FOR_CRATE: 15.0,
         
         e.KILLED_OPPONENT: 1000.0,
         e.GOT_KILLED: -10,
@@ -236,14 +237,14 @@ def reward_from_events(events) -> float:
 
     # Punish for joint event
     joint_event_penalties = {
-        (e.WAITED, LOOP_DETECTED): -55.0,
-        (e.WAITED, LOOP_DETECTED, 'WAIT_REPEAT'): -45,
-        (e.INVALID_ACTION, LOOP_DETECTED): -55.0,
-        (e.INVALID_ACTION, LOOP_DETECTED, 'UP_REPEAT'): -40,
-        (e.INVALID_ACTION, LOOP_DETECTED, 'DOWN_REPEAT'): -40,
-        (e.INVALID_ACTION, LOOP_DETECTED, 'LEFT_REPEAT'): -40,
-        (e.INVALID_ACTION, LOOP_DETECTED, 'RIGHT_REPEAT'): -40,
-        (e.INVALID_ACTION, LOOP_DETECTED, 'BOMB_REPEAT'): -100,
+        (e.WAITED, LOOP_DETECTED): -20.0,
+        (e.WAITED, LOOP_DETECTED, 'WAIT_REPEAT'): -20,
+        (e.INVALID_ACTION, LOOP_DETECTED): -20.0,
+        (e.INVALID_ACTION, LOOP_DETECTED, 'UP_REPEAT'): -15,
+        (e.INVALID_ACTION, LOOP_DETECTED, 'DOWN_REPEAT'): -15,
+        (e.INVALID_ACTION, LOOP_DETECTED, 'LEFT_REPEAT'): -15,
+        (e.INVALID_ACTION, LOOP_DETECTED, 'RIGHT_REPEAT'): -15,
+        (e.INVALID_ACTION, LOOP_DETECTED, 'BOMB_REPEAT'): -50,
         (e.GOT_KILLED, e.KILLED_SELF): +100.0,
         (e.MOVED_RIGHT, EXCAPE_FROM_BOMB): 40.0,
         (e.MOVED_LEFT, EXCAPE_FROM_BOMB): 40.0,
@@ -257,10 +258,10 @@ def reward_from_events(events) -> float:
         (e.MOVED_LEFT, COIN_CLOSER): 20.0,
         (e.MOVED_UP, COIN_CLOSER): 20.0,
         (e.MOVED_DOWN, COIN_CLOSER): 20.0,
-        (e.MOVED_RIGHT, LOOP_DETECTED): 3.0,
-        (e.MOVED_LEFT, LOOP_DETECTED): 3.0,
-        (e.MOVED_UP, LOOP_DETECTED): 3.0,
-        (e.MOVED_DOWN, LOOP_DETECTED): 3.0,
+        (e.MOVED_RIGHT, LOOP_DETECTED): 5.0,
+        (e.MOVED_LEFT, LOOP_DETECTED): 5.0,
+        (e.MOVED_UP, LOOP_DETECTED): 5.0,
+        (e.MOVED_DOWN, LOOP_DETECTED): 5.0,
         (e.BOMB_DROPPED, LOOP_DETECTED): 2.0,
     }
 

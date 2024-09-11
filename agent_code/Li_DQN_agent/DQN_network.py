@@ -17,6 +17,7 @@ import logging
 from typing import List
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class DQN(nn.Module):
     def __init__(self, input_channels, output_size):
@@ -89,7 +90,7 @@ class DQN(nn.Module):
         return self.model(x)
 
 
-    def action(self, state, device='cuda'):
+    def action(self, state, device=DEVICE):
         # If the player position is at coner [1,1], [1,15], [15,1], [15,15], take the following actions
         if state[0][1][1] == 1:
             action_code = 2 if np.random.rand() < 0.5 else 1
@@ -203,7 +204,7 @@ class DQN(nn.Module):
 
         return states, actions, rewards, next_states, dones
 
-    def dqn_train(self, replay_buffer, experience_buffer, batch_size, target_model = None, device='cuda'):
+    def dqn_train(self, replay_buffer, experience_buffer, batch_size, target_model = None, device=DEVICE):
         # Sample experiences
         experiences = self.sample_experiences(replay_buffer, experience_buffer, batch_size)
         
@@ -410,7 +411,7 @@ def repeat_action(action_buffer: List, action_buffer_size: int) -> int:
     return -1
 
 
-def compute_td_loss(model, target_model, experiences, gamma=0.99, device='cuda'):
+def compute_td_loss(model, target_model, experiences, gamma=0.99, device=DEVICE):
     states = torch.FloatTensor([exp.agent_state for exp in experiences]).to(device)
     actions = torch.LongTensor([exp.action for exp in experiences]).to(device)
     rewards = torch.FloatTensor([exp.reward for exp in experiences]).to(device)

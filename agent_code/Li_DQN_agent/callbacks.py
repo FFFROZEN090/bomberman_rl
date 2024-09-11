@@ -9,7 +9,7 @@ import logging
 
 
 EXPERIENCE_BUFFER_SIZE = 5000000
-REPLAY_BUFFER_SIZE = 2000
+REPLAY_BUFFER_SIZE = 5000
 
 MODEL_NAME = 'Li_DQN_agent'
 LAST_EPISODE = 10750
@@ -46,6 +46,9 @@ def setup(self):
 
     self.surving_rounds = 0
 
+    self.spwan_position = None
+    self.rotate = 0
+
     # Set a action buffer with size 10
     self.action_buffer = []
     self.action_buffer_size = 10
@@ -69,6 +72,17 @@ def setup(self):
 
 
 def act(agent, game_state: dict):
+    # For the first step of each round, we record the spawn position
+    if game_state['step'] == 1:
+        agent.spwan_position = game_state['self'][3]
+        if agent.spwan_position[0] == 1 and agent.spwan_position[1] == 1:
+            agent.rotate = 0
+        elif agent.spwan_position[0] == 15 and agent.spwan_position[1] == 1:
+            agent.rotate = 90
+        elif agent.spwan_position[0] == 15 and agent.spwan_position[1] == 15:
+            agent.rotate = 180
+        elif agent.spwan_position[0] == 1 and agent.spwan_position[1] == 15:
+            agent.rotate = 270
     agent.logger.info('Choosing action based on current state.')
     # Get the current state representation
     current_state = get_low_level_state(game_state)
@@ -76,9 +90,32 @@ def act(agent, game_state: dict):
     # Use the model to choose an action
     action = agent.model.action(current_state)
 
+    # Rotate the action by 90, 180, 270 degrees
+    action = rotate_action(action, agent.rotate)
+
     # Convert the action index to the corresponding action string
     action_string = ACTIONS[action]
 
     agent.logger.info(f'Agent Action: {action_string}')
 
+    # print location
+    agent.logger.info(f'Agent Location: {game_state["self"][3]}')
+
+
     return action_string
+
+"""
+Rotate the action by 90, 180, 270 degrees.
+"""
+def rotate_action(action, angle):
+    # If action is WAIT or BOMB, return the same action
+    if action == 4 or action == 5:
+        return action
+    if angle == 90:
+        return (action + 1) % 4
+    elif angle == 180:
+        return (action + 2) % 4
+    elif angle == 270:
+        return (action + 3) % 4
+    else:
+        return action

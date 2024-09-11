@@ -19,7 +19,7 @@ Args:
 Returns:
     numpy.ndarray: A 14x17x17 array representing the game state.
 """
-def get_low_level_state(game_state):
+def get_low_level_state(game_state, rotate=0):
     # Initialize the state array
     state = np.zeros((14, 17, 17), dtype=np.int8)
     
@@ -71,6 +71,9 @@ def get_low_level_state(game_state):
     
     # Add actual explosions
     state[12, :, :] = np.where(explosion_map == 2, 1, 0)
+
+    # Rotate the state if necessary
+    state = rotate_state(state, rotate)
     
     return state
 
@@ -241,4 +244,19 @@ def get_state(game_state):
     state[:14, :, :] = low_level_state
     state[14:, :, :] = high_level_state
     return state
+
+
+"""
+Rotate the state by 90, 180, 270 degrees.
+"""
+def rotate_state(state, angle):
+    if angle == 90:
+        return np.rot90(state, k=1, axes=(1, 2))
+    elif angle == 180:
+        return np.rot90(state, k=2, axes=(1, 2))
+    elif angle == 270:
+        return np.rot90(state, k=3, axes=(1, 2))
+    else:
+        return state
+    
 
