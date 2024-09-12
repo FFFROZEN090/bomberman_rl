@@ -12,7 +12,7 @@ from collections import deque
 
 from typing import List
 
-import wandb
+import json
 
 from .DQN_network import ExperienceDataset, ReplayBuffer
 from .DQN_datatype import Experience
@@ -30,7 +30,19 @@ BOMB_DROPPED_FOR_CRATE = 'BOMB_DROPPED_FOR_CRATE' # Crates will be destroyed by 
 EXCAPE_FROM_BOMB = 'EXCAPE_FROM_BOMB'
 LOOP_DETECTED = 'LOOP_DETECTED'
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
-WANDB = True
+UP_REPEAT = 'UP_REPEAT'
+RIGHT_REPEAT = 'RIGHT_REPEAT'
+DOWN_REPEAT = 'DOWN_REPEAT'
+LEFT_REPEAT = 'LEFT_REPEAT'
+WAIT_REPEAT = 'WAIT_REPEAT'
+BOMB_REPEAT = 'BOMB_REPEAT'
+WAIT = 'WAIT'
+RIGHT = 'RIGHT'
+UP = 'UP'
+DOWN = 'DOWN'
+LEFT = 'LEFT'
+BOMB = 'BOMB'
+
 
 # TODO: Setup model and experience structure for DQN
 def setup_training(self):
@@ -44,29 +56,29 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     self.logger.debug(f'Encountered game event(s) {", ".join([event for event in events])}')
 
     # print agent position
-    self.logger.info(f'Agent position: {new_game_state["self"][3]}')
+    self.logger.info(f'Agent position: {old_game_state["self"][3]}')
     
     events = calculate_events(self, old_game_state, self_action, new_game_state, events)
 
     # Get DQN state
-    state = get_low_level_state(new_game_state, rotate=self.rotate)
+    state = get_state(new_game_state, rotate=self.rotate)
 
     # Get old state
-    old_state = get_low_level_state(old_game_state, self.rotate)
+    old_state = get_state(old_game_state, self.rotate)
 
     # Get reward
-    reward = reward_from_events(events)
+    reward = calculate_reward(events, self.last_action_type)
     
     if self.last_action is None:
         self.last_action = self_action
 
     # Get Last Action number
-    last_action_number = ACTIONS.index(self.last_action) if self.last_action is not None else None
+    action_number = ACTIONS.index(self_action)
 
     # If self.last_reward is not None, then store the experience
     if self.last_reward is not None and self.last_action is not None:
-        self.experience_buffer.add(Experience(old_state, None, last_action_number, reward, state, None, False))
-        self.replay_buffer.add(Experience(old_state, None, last_action_number, reward, state, None, False))
+        self.experience_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
+        self.replay_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
 
     # Update last reward
     self.last_reward = reward
@@ -139,6 +151,8 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
         elif self.action_buffer.count('BOMB') >= self.action_buffer_size // 2 - 1:
             self.action_buffer.clear()
 
+    events.append(self_action)
+
     return events
                     
     
@@ -148,21 +162,21 @@ def end_of_round(self, last_game_state, last_action, events):
     self.logger.debug(f'Encountered game event(s) {", ".join([event for event in events])}')
 
     # Get DQN state
-    state = get_low_level_state(last_game_state, rotate=self.rotate)
+    state = get_state(last_game_state, rotate=self.rotate)
 
     # Get old state
-    old_state = get_low_level_state(last_game_state, rotate=self.rotate)
+    old_state = get_state(last_game_state, rotate=self.rotate)
 
     # Get reward
-    reward = reward_from_events(events)
+    reward = calculate_reward(events, self.last_action_type)
 
     # Get Action number
-    last_action = ACTIONS.index(self.last_action) if self.last_action is not None else None
+    action_number = ACTIONS.index(last_action)
 
     # If self.last_reward is not None, then store the experience
     if self.last_reward is not None and self.last_action is not None:
-        self.experience_buffer.add(Experience(old_state, None, last_action, reward, state, None, False))
-        self.replay_buffer.add(Experience(old_state, None, last_action, reward, state, None, False))
+        self.experience_buffer.add(Experience(old_state, None, action_number, reward, state, None, True))
+        self.replay_buffer.add(Experience(old_state, None, action_number, reward, state, None, True))
 
     self.logger.info(f'Events: {events}')
 
@@ -195,82 +209,43 @@ def end_of_round(self, last_game_state, last_action, events):
     self.action_buffer.clear()
 
 
-def reward_from_events(events) -> float:
-    reward = 0
-    game_rewards = {
-        e.INVALID_ACTION: -2.0,
-        e.MOVED_LEFT: 20.0,
-        e.MOVED_RIGHT: 20.0,
-        e.MOVED_UP: 20.0,
-        e.MOVED_DOWN: 20.0,
-        e.WAITED: -1.5,
-        e.BOMB_DROPPED: 10.0,
-        e.OPPONENT_ELIMINATED: 10.00,
-        
-        LOOP_DETECTED: -5.0,
-        
-        e.CRATE_DESTROYED: 20.0,
-        e.COIN_FOUND: 15.0,
-        COIN_CLOSE: 30.0,
-        COIN_CLOSER: 40.0,
-        e.COIN_COLLECTED: 200.0,
-        
-        EXCAPE_FROM_BOMB: 50.0,
-        e.BOMB_EXPLODED: 10.0,
-        
-        BOMB_DROPPED_FOR_CRATE: 15.0,
-        
-        e.KILLED_OPPONENT: 1000.0,
-        e.GOT_KILLED: -10,
-        e.KILLED_SELF: -30,
-        e.SURVIVED_ROUND: 10.0,
 
-        # Events for Repeat Actions
-        'UP_REPEAT': -2.0,
-        'RIGHT_REPEAT': -2.0,
-        'DOWN_REPEAT': -2.0,
-        'LEFT_REPEAT': -2.0,
-        'WAIT_REPEAT': -10.0,
-
+# Function to load reward settings from a JSON file
+def load_reward_settings(file_path):
+    with open(file_path, 'r') as file:
+        reward_settings = json.load(file)
+        
+    # Convert joint_event_penalties keys from string to tuple
+    reward_settings['joint_event_penalties'] = {
+        eval(k): v for k, v in reward_settings['joint_event_penalties'].items()
     }
-    reward = sum([game_rewards[event] for event in events])
+    return reward_settings
+
+def reward_from_events(events, reward_settings) -> float:
+    reward = 0
+    game_rewards = reward_settings['event_rewards']
+    
+    reward = sum([game_rewards.get(event, 0) for event in events])
 
     # Punish for joint event
-    joint_event_penalties = {
-        (e.WAITED, LOOP_DETECTED): -20.0,
-        (e.WAITED, LOOP_DETECTED, 'WAIT_REPEAT'): -20,
-        (e.INVALID_ACTION, LOOP_DETECTED): -20.0,
-        (e.INVALID_ACTION, LOOP_DETECTED, 'UP_REPEAT'): -15,
-        (e.INVALID_ACTION, LOOP_DETECTED, 'DOWN_REPEAT'): -15,
-        (e.INVALID_ACTION, LOOP_DETECTED, 'LEFT_REPEAT'): -15,
-        (e.INVALID_ACTION, LOOP_DETECTED, 'RIGHT_REPEAT'): -15,
-        (e.INVALID_ACTION, LOOP_DETECTED, 'BOMB_REPEAT'): -50,
-        (e.GOT_KILLED, e.KILLED_SELF): +100.0,
-        (e.MOVED_RIGHT, EXCAPE_FROM_BOMB): 40.0,
-        (e.MOVED_LEFT, EXCAPE_FROM_BOMB): 40.0,
-        (e.MOVED_UP, EXCAPE_FROM_BOMB): 40.0,
-        (e.MOVED_DOWN, EXCAPE_FROM_BOMB): 40.0,
-        (e.MOVED_RIGHT, COIN_CLOSE): 15.0,
-        (e.MOVED_LEFT, COIN_CLOSE): 15.0,
-        (e.MOVED_UP, COIN_CLOSE): 15.0,
-        (e.MOVED_DOWN, COIN_CLOSE): 15.0,
-        (e.MOVED_RIGHT, COIN_CLOSER): 20.0,
-        (e.MOVED_LEFT, COIN_CLOSER): 20.0,
-        (e.MOVED_UP, COIN_CLOSER): 20.0,
-        (e.MOVED_DOWN, COIN_CLOSER): 20.0,
-        (e.MOVED_RIGHT, LOOP_DETECTED): 5.0,
-        (e.MOVED_LEFT, LOOP_DETECTED): 5.0,
-        (e.MOVED_UP, LOOP_DETECTED): 5.0,
-        (e.MOVED_DOWN, LOOP_DETECTED): 5.0,
-        (e.BOMB_DROPPED, LOOP_DETECTED): 2.0,
-    }
-
-    # Check if joint events occur and apply penalties
+    joint_event_penalties = reward_settings['joint_event_penalties']
+    
     for joint_event, penalty in joint_event_penalties.items():
-        if all(event in events for event in joint_event):
+        # Check if the joint event is a subset of the events
+        if set(joint_event).issubset(set(events)):
             reward += penalty
 
+    return reward
+
+def calculate_reward(events, action_type):
+
+    if action_type == "network":
+        reward_settings = load_reward_settings("network_rewards.json")
+    elif action_type == "exploration":
+        reward_settings = load_reward_settings("exploration_rewards.json")
     
+    reward = reward_from_events(events, reward_settings)
+
     return reward
 
     

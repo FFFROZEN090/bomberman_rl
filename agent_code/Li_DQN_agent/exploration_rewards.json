@@ -1,0 +1,46 @@
+{
+    "event_rewards": {
+      "e.INVALID_ACTION": -1.0,
+      "e.MOVED_LEFT": 30.0,
+      "e.MOVED_RIGHT": 30.0,
+      "e.MOVED_UP": 30.0,
+      "e.MOVED_DOWN": 30.0,
+      "e.WAITED": -0.5,
+      "e.BOMB_DROPPED": 20.0,
+      "e.OPPONENT_ELIMINATED": 20.0,
+      "LOOP_DETECTED": -2.0,
+      "e.CRATE_DESTROYED": 40.0,
+      "e.COIN_FOUND": 30.0,
+      "COIN_CLOSE": 30.0,
+      "COIN_CLOSER": 40.0,
+      "e.COIN_COLLECTED": 200.0,
+      "EXCAPE_FROM_BOMB": 50.0,
+      "e.BOMB_EXPLODED": 40.0,
+      "BOMB_DROPPED_FOR_CRATE": 15.0,
+      "e.KILLED_OPPONENT": 1000.0,
+      "e.GOT_KILLED": -10.0,
+      "e.KILLED_SELF": -30.0,
+      "e.SURVIVED_ROUND": 10.0,
+      "UP_REPEAT": -2.0,
+      "RIGHT_REPEAT": -2.0,
+      "DOWN_REPEAT": -2.0,
+      "LEFT_REPEAT": -2.0,
+      "WAIT_REPEAT": -10.0
+    },
+    "joint_event_penalties": {
+      "(e.WAITED, LOOP_DETECTED)": -0.0,
+      "(e.WAITED, LOOP_DETECTED, WAIT_REPEAT)": -0.0,
+      "(e.INVALID_ACTION, LOOP_DETECTED)": -0.0,
+      "(e.INVALID_ACTION, LOOP_DETECTED, UP_REPEAT)": -0.0,
+      "(e.INVALID_ACTION, LOOP_DETECTED, DOWN_REPEAT)": -0.0,
+      "(e.INVALID_ACTION, LOOP_DETECTED, LEFT_REPEAT)": -0.0,
+      "(e.INVALID_ACTION, LOOP_DETECTED, RIGHT_REPEAT)": -0.0,
+      "(e.INVALID_ACTION, LOOP_DETECTED, BOMB_REPEAT)": -0.0,
+      "(e.GOT_KILLED, e.KILLED_SELF)": 100.0,
+      "(e.MOVED_RIGHT, EXCAPE_FROM_BOMB)": 40.0,
+      "(e.MOVED_LEFT, EXCAPE_FROM_BOMB)": 40.0,
+      "(e.MOVED_UP, EXCAPE_FROM_BOMB)": 40.0,
+      "(e.MOVED_DOWN, EXCAPE_FROM_BOMB)": 40.0
+    }
+}
+  

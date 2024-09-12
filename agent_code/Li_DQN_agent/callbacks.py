@@ -8,11 +8,11 @@ from .DQN_network import DQN, ExperienceDataset, ReplayBuffer
 import logging
 
 
-EXPERIENCE_BUFFER_SIZE = 5000000
-REPLAY_BUFFER_SIZE = 5000
+EXPERIENCE_BUFFER_SIZE = 3000000
+REPLAY_BUFFER_SIZE = 1000
 
 MODEL_NAME = 'Li_DQN_agent'
-LAST_EPISODE = 10750
+LAST_EPISODE = 0
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_' + str(LAST_EPISODE) + '.pt')
@@ -22,13 +22,14 @@ def setup(self):
     self.logger.info('Successfully entered setup code')
 
     # Setup the model
-    self.model = DQN(input_channels=14, output_size=6)
+    self.model = DQN(input_channels=24, output_size=6)
     self.model.epoch = LAST_EPISODE
-    self.target_model = DQN(input_channels=14, output_size=6)
+    self.target_model = DQN(input_channels=24, output_size=6)
 
     # Store the last state and action
     self.last_state = None
     self.last_action = None
+    self.last_action_type = None
     self.last_reward = None
 
     # Store last game state
@@ -41,8 +42,6 @@ def setup(self):
     self.replay_buffer = ReplayBuffer(REPLAY_BUFFER_SIZE)
 
     self.batch_size = REPLAY_BUFFER_SIZE
-
-    self.max_rounds = 20000
 
     self.surving_rounds = 0
 
@@ -62,7 +61,7 @@ def setup(self):
         elif os.path.exists(MODEL_PATH):
             self.model.load(MODEL_PATH)
             self.target_model.load(MODEL_PATH)
-            self.model.exploration_prob = 0.3
+            self.model.exploration_prob = 0.1
             self.logger.info('Model for training loaded')
     else:
         self.model.load(MODEL_PATH)
@@ -83,12 +82,11 @@ def act(agent, game_state: dict):
             agent.rotate = 180
         elif agent.spwan_position[0] == 1 and agent.spwan_position[1] == 15:
             agent.rotate = 270
-    agent.logger.info('Choosing action based on current state.')
     # Get the current state representation
-    current_state = get_low_level_state(game_state)
+    current_state = get_state(game_state, rotate=agent.rotate)
 
     # Use the model to choose an action
-    action = agent.model.action(current_state)
+    action, action_type = agent.model.action(current_state)
 
     # Rotate the action by 90, 180, 270 degrees
     action = rotate_action(action, agent.rotate)
@@ -96,11 +94,9 @@ def act(agent, game_state: dict):
     # Convert the action index to the corresponding action string
     action_string = ACTIONS[action]
 
-    agent.logger.info(f'Agent Action: {action_string}')
+    agent.logger.info(f'Action: {action_string}')
 
-    # print location
-    agent.logger.info(f'Agent Location: {game_state["self"][3]}')
-
+    agent.last_action_type = action_type
 
     return action_string
 

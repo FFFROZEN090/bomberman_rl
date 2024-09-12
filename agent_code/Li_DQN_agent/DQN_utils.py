@@ -234,10 +234,10 @@ def check_reward_zone(state, high_level_state):
 
 
 
-def get_state(game_state):
+def get_state(game_state, rotate):
     # Initialize the state
     state = np.zeros((24, 17, 17), dtype=np.int8)
-    low_level_state = get_low_level_state(game_state)
+    low_level_state = get_low_level_state(game_state, rotate)
     high_level_state = get_high_level_state(low_level_state)
 
     # Concatenate the low level state and high level state
@@ -251,12 +251,12 @@ Rotate the state by 90, 180, 270 degrees.
 """
 def rotate_state(state, angle):
     if angle == 90:
-        return np.rot90(state, k=1, axes=(1, 2))
+        return np.rot90(state, k=1, axes=(2, 1)).copy()
     elif angle == 180:
-        return np.rot90(state, k=2, axes=(1, 2))
+        return np.rot90(state, k=2, axes=(2, 1)).copy()
     elif angle == 270:
-        return np.rot90(state, k=3, axes=(1, 2))
+        return np.rot90(state, k=3, axes=(2, 1)).copy()
     else:
-        return state
+        return state.copy()
     
 

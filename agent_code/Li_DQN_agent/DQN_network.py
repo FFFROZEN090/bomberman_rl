@@ -18,6 +18,7 @@ from typing import List
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+WANDB = True
 
 class DQN(nn.Module):
     def __init__(self, input_channels, output_size):
@@ -58,7 +59,7 @@ class DQN(nn.Module):
 
         self.epoch = 0
 
-        self.wandb = True
+        self.wandb = WANDB
 
         self.scores = []
 
@@ -95,25 +96,25 @@ class DQN(nn.Module):
         if state[0][1][1] == 1:
             action_code = 2 if np.random.rand() < 0.5 else 1
             update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
-            return action_code
+            return action_code, "exploration"
         elif state[0][1][15] == 1:
             action_code = 3 if np.random.rand() < 0.5 else 1
             update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
-            return action_code
+            return action_code, "exploration"
         elif state[0][15][1] == 1:
             action_code = 2 if np.random.rand() < 0.5 else 0
             update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
-            return action_code
+            return action_code, "exploration"
         elif state[0][15][15] == 1:
             action_code = 3 if np.random.rand() < 0.5 else 0
             update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
-            return action_code
+            return action_code, "exploration"
         elif np.random.rand() < self.exploration_prob:
             # Update the exploration probability
             self.exploration_prob *= self.decay_rate
             action_code = np.random.randint(0, self.output_size)
             update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
-            return action_code
+            return action_code, "exploration"
         else:
             with torch.no_grad():
                 input = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(device)
@@ -163,16 +164,16 @@ class DQN(nn.Module):
                     # Decrease the life_time of all repeat action
                     action_code = torch.argmax(q_values).item()
                     update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
-                    return action_code
+                    return action_code, "network"
                 action_code = torch.argmax(q_values).item()
                 update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
-                return action_code
+                return action_code, "network"
 
 
 
     def sample_experiences(self, replay_buffer, experience_buffer, batch_size):
         # Calculate the number of samples from each source
-        replay_samples = int(0.4 * batch_size)
+        replay_samples = int(0.7 * batch_size)
         experience_samples = batch_size - replay_samples
 
         # Sample from replay buffer
@@ -229,8 +230,9 @@ class DQN(nn.Module):
         # For done states, the target Q-value is equal to the reward
         target_q_values[dones] = rewards[dones]
 
-        if target_q_values.sum() < 0:
-            self.exploration_prob = min(self.exploration_prob + 0.1, 1.0)
+        if self.epoch % 10 == 0:
+            if target_q_values.sum() < 0:
+                self.exploration_prob = min(self.exploration_prob + 0.01, 1.5)
 
         # Rescale target Q-values and current Q-values to [0,1]
         target_q_values = (target_q_values - target_q_values.min()) / ((target_q_values.max() - target_q_values.min()) + 1e-9)
@@ -257,23 +259,23 @@ class DQN(nn.Module):
         self.rewards_list.append(rewards.sum().to('cpu').detach().numpy())
 
 
-        if self.epoch % 20 == 0:
+        if self.epoch % 50 == 0:
             if target_model is not None:
                 # Copy Parameters from the model to the target model
                 target_model.load_state_dict(self.state_dict())
 
 
         
-        if self.epoch % 20 == 0 and self.epoch != 0:
+        if self.epoch % 50 == 0 and self.epoch != 0:
             if is_downstream_trend(self.rewards_list):
                 # Uptune exploration probability by 0.1
-                self.exploration_prob = min(self.exploration_prob + 0.08, 1.0)
+                self.exploration_prob = min(self.exploration_prob + 0.01, 1.5)
                 # Reset rewards
                 self.rewards_list = []
 
 
         # If after 100 epochs, save the model
-        if self.epoch % 50 == 0:
+        if self.epoch % 100 == 0:
             if not os.path.exists(os.path.join(os.path.dirname(__file__), 'checkpoints')):
                 os.mkdir(os.path.join(os.path.dirname(__file__), 'checkpoints'))
             self.save(os.path.join(os.path.dirname(__file__), 'checkpoints', 'Li_DQN_agent' + '_' + str(self.epoch) + '.' + 'pt'))

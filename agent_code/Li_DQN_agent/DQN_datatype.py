@@ -16,6 +16,7 @@ class Experience:
         self.global_next_state = global_next_state
         self.agent_next_state = agent_next_state
         self.done = done
+        self.action_type = None
 
     def set_global_state(self, global_state):
         self.global_state = global_state
