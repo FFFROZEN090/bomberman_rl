@@ -28,6 +28,7 @@ References/
 MANIFEST
 checkpoints/
 checkpoints_all/
+checkpoints_coinheaven/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
