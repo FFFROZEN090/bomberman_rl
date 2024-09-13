@@ -218,7 +218,7 @@ def end_of_round(self, last_game_state, last_action, events):
         save_path = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_'+ 
                           MODEL_TYPE + '_seq_' + str(SEQ_LEN) + '_layer_' + 
                           str(N_LAYERS) + '_alpha_' + 
-                          str(ALPHA) + '_' + str(self.model.episode) + '.pt')
+                          str(ALPHA) + '_hidden_' + str(HIDDEN_DIM) + '_'+ str(self.model.episode) + '.pt')
         self.model.save(save_path)
         
     # print(f'The model has {self.model.count_parameters():,} parameters')
@@ -233,7 +233,7 @@ def reward_from_events(events) -> float:
         e.MOVED_UP: 0.1,
         e.MOVED_DOWN: 0.1,
         e.WAITED: -0.2,
-        e.BOMB_DROPPED: 0.1,
+        e.BOMB_DROPPED: -0.1,
         
         LOOP_DETECTED: -0.3,
         

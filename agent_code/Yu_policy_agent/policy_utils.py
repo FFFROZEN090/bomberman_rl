@@ -253,6 +253,14 @@ class BasePolicy(nn.Module):
                 right_coins_score += 1/(xc-self_pos[0])
             elif xc < self_pos[0]:
                 left_coins_score += 1/(self_pos[0]-xc)
+                
+        up_coin_distance = 0
+        down_coin_distance = 0
+        left_coin_distance = 0
+        right_coin_distance = 0
+        for (xc, yc) in coins:
+            up_coin_distance 
+            
         
         # Features 2.2. determine the distance to the crates
         crates_list = [(i, j) for i in range(s.COLS) for j in range(s.ROWS) if arena[i, j] == 1]
