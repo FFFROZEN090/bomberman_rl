@@ -46,8 +46,8 @@ def setup(self):
         self.logger.info('Model for training loaded')
     else:
         self.model.load(MODEL_PATH)
-        self.model.eval()
-        self.model.requires_grad_(False)
+        # self.model.eval()
+        # self.model.requires_grad_(False)
         self.logger.info('Model for evaluation loaded')
     
 
