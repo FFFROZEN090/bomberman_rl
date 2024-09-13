@@ -9,16 +9,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import os
-from torchsummary import summary
 import random
 from .DQN_datatype import Experience
-import wandb
 import logging
 from typing import List
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-WANDB = True
+WANDB = False
 
 class DQN(nn.Module):
     def __init__(self, input_channels, output_size):

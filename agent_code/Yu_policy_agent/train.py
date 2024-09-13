@@ -6,7 +6,6 @@ from collections import deque
 
 from typing import List
 
-import wandb
 from .config import *
 
 from .rulebased_teacher import TeacherModel

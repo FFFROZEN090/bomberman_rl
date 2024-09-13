@@ -2,15 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import os
-import wandb
 from .policy_utils import *
 from collections import deque
 
 from .rulebased_teacher import TeacherModel
 from .config import *
 
-
-#TODO: Visualize the training process by wandb
 
 
 # Simple feedforward policy

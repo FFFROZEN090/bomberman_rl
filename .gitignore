@@ -27,6 +27,7 @@ References/
 *.egg
 MANIFEST
 checkpoints/
+checkpoint/
 checkpoints_all/
 checkpoints_coinheaven/
 

@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import os
-import wandb
 from .rulebased_teacher import TeacherModel
 
 from .config import ACTIONS

@@ -22,5 +22,5 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', LOAD_MODEL_N
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 
-TEST_MODE = False # Whether to test the model
+TEST_MODE = True # Whether to test the model
 
