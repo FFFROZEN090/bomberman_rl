@@ -12,7 +12,8 @@ EXPERIENCE_BUFFER_SIZE = 3000000
 REPLAY_BUFFER_SIZE = 1000
 
 MODEL_NAME = 'Li_DQN_agent'
-LAST_EPISODE = 0
+LAST_EPISODE = 4200
+INPUT_CHANNELS = 14
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_' + str(LAST_EPISODE) + '.pt')
@@ -22,9 +23,9 @@ def setup(self):
     self.logger.info('Successfully entered setup code')
 
     # Setup the model
-    self.model = DQN(input_channels=24, output_size=6)
+    self.model = DQN(input_channels=INPUT_CHANNELS, output_size=6)
     self.model.epoch = LAST_EPISODE
-    self.target_model = DQN(input_channels=24, output_size=6)
+    self.target_model = DQN(input_channels=INPUT_CHANNELS, output_size=6)
 
     # Store the last state and action
     self.last_state = None

@@ -238,12 +238,12 @@ def get_state(game_state, rotate):
     # Initialize the state
     state = np.zeros((24, 17, 17), dtype=np.int8)
     low_level_state = get_low_level_state(game_state, rotate)
-    high_level_state = get_high_level_state(low_level_state)
+    # high_level_state = get_high_level_state(low_level_state)
 
     # Concatenate the low level state and high level state
     state[:14, :, :] = low_level_state
-    state[14:, :, :] = high_level_state
-    return state
+    # state[14:, :, :] = high_level_state
+    return low_level_state
 
 
 """
