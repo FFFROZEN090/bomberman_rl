@@ -25,26 +25,25 @@ class DQN(nn.Module):
         super(DQN, self).__init__()
         # Sequential model
         self.model = nn.Sequential(
-            # Convolutional layers
-            nn.Conv2d(input_channels, 32, kernel_size=5, stride=2),  # (17x17x24 -> 7x7x32)
+            nn.Conv2d(input_channels, 256, kernel_size=5, stride=2), 
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=1),              # (7x7x32 -> 5x5x64)
+            nn.Conv2d(256, 512, kernel_size=3, stride=1),
             nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=3, stride=1),             # (5x5x64 -> 3x3x128)
+            nn.Conv2d(512, 1024, kernel_size=3, stride=1),
             nn.ReLU(),
-            nn.Flatten(),  # Flatten the output for fully connected layers
-            # Fully connected layers
-            nn.Linear(128 * 3 * 3, 512),
+            nn.Flatten(),
+            nn.Linear(1024 * 3 * 3, 512),
             nn.ReLU(),
-            nn.Linear(512, output_size),
-            nn.ReLU()
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, output_size),
         )
 
         # Exploration probability
         self.exploration_prob = 1.0
 
         # Decay rate
-        self.decay_rate = 0.99995
+        self.decay_rate = 0.995
 
         # Learning rate
         self.learning_rate = 0.001
@@ -66,7 +65,7 @@ class DQN(nn.Module):
         self.survived_rounds = []
         self.rewards_list = []
         self.action_buffer = []
-        self.action_buffer_size = 10
+        self.action_buffer_size = 8
         self.best_score = 0
 
         # Initialize wandb
@@ -92,24 +91,7 @@ class DQN(nn.Module):
 
 
     def action(self, state, device=DEVICE):
-        # If the player position is at coner [1,1], [1,15], [15,1], [15,15], take the following actions
-        if state[0][1][1] == 1:
-            action_code = 2 if np.random.rand() < 0.5 else 1
-            update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
-            return action_code, "exploration"
-        elif state[0][1][15] == 1:
-            action_code = 3 if np.random.rand() < 0.5 else 1
-            update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
-            return action_code, "exploration"
-        elif state[0][15][1] == 1:
-            action_code = 2 if np.random.rand() < 0.5 else 0
-            update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
-            return action_code, "exploration"
-        elif state[0][15][15] == 1:
-            action_code = 3 if np.random.rand() < 0.5 else 0
-            update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
-            return action_code, "exploration"
-        elif np.random.rand() < self.exploration_prob:
+        if np.random.rand() < self.exploration_prob:
             # Update the exploration probability
             self.exploration_prob *= self.decay_rate
             action_code = np.random.randint(0, self.output_size)
@@ -120,47 +102,47 @@ class DQN(nn.Module):
                 input = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(device)
                 self.to(device)
                 q_values = self.forward(input)
-                repeat_action_code = repeat_action(self.action_buffer, 10)
+                repeat_action_code, self.action_buffer = repeat_action(self.action_buffer, self.action_buffer_size)
                 if repeat_action_code != -1:
                     #decrease the corresponding q_value to 10%
                     q_values[0][repeat_action_code] = q_values[0][repeat_action_code] * 0.1
                     # If the action is UP, increase the q_value of DOWN; If the action is RIGHT, increase the q_value of LEFT
                     if repeat_action_code == 0:
                         q_values[0][2] = q_values[0][2] * 1.5
-                        q_values[0][3] = q_values[0][3] * 1.2
-                        q_values[0][1] = q_values[0][1] * 1.2
-                        q_values[0][4] = q_values[0][4] * 1.1
-                        q_values[0][5] = q_values[0][5] * 1.1
+                        q_values[0][3] = q_values[0][3] * 1.5
+                        q_values[0][1] = q_values[0][1] * 1.5
+                        q_values[0][4] = q_values[0][4] * 1.5
+                        q_values[0][5] = q_values[0][5] * 1.5
                     elif repeat_action_code == 1:
                         q_values[0][3] = q_values[0][3] * 1.5
-                        q_values[0][0] = q_values[0][0] * 1.2
-                        q_values[0][2] = q_values[0][2] * 1.2
-                        q_values[0][4] = q_values[0][4] * 1.1
-                        q_values[0][5] = q_values[0][5] * 1.1
+                        q_values[0][0] = q_values[0][0] * 1.5
+                        q_values[0][2] = q_values[0][2] * 1.5
+                        q_values[0][4] = q_values[0][4] * 1.5
+                        q_values[0][5] = q_values[0][5] * 1.5
                     elif repeat_action_code == 2:
                         q_values[0][0] = q_values[0][0] * 1.5
-                        q_values[0][1] = q_values[0][1] * 1.2
-                        q_values[0][3] = q_values[0][3] * 1.2
-                        q_values[0][4] = q_values[0][4] * 1.1
-                        q_values[0][5] = q_values[0][5] * 1.1
+                        q_values[0][1] = q_values[0][1] * 1.5
+                        q_values[0][3] = q_values[0][3] * 1.5
+                        q_values[0][4] = q_values[0][4] * 1.5
+                        q_values[0][5] = q_values[0][5] * 1.5
                     elif repeat_action_code == 3:
                         q_values[0][1] = q_values[0][1] * 1.5
-                        q_values[0][0] = q_values[0][0] * 1.2
-                        q_values[0][2] = q_values[0][2] * 1.2
-                        q_values[0][4] = q_values[0][4] * 1.1
-                        q_values[0][5] = q_values[0][5] * 1.1
+                        q_values[0][0] = q_values[0][0] * 1.5
+                        q_values[0][2] = q_values[0][2] * 1.5
+                        q_values[0][4] = q_values[0][4] * 1.5
+                        q_values[0][5] = q_values[0][5] * 1.5
                     elif repeat_action_code == 4:
-                        q_values[0][0] = q_values[0][0] * 1.2
-                        q_values[0][1] = q_values[0][1] * 1.2
-                        q_values[0][2] = q_values[0][2] * 1.2
-                        q_values[0][3] = q_values[0][3] * 1.2
-                        q_values[0][5] = q_values[0][5] * 1.1
+                        q_values[0][0] = q_values[0][0] * 1.5
+                        q_values[0][1] = q_values[0][1] * 1.5
+                        q_values[0][2] = q_values[0][2] * 1.5
+                        q_values[0][3] = q_values[0][3] * 1.5
+                        q_values[0][5] = q_values[0][5] * 1.5
                     elif repeat_action_code == 5:
-                        q_values[0][0] = q_values[0][0] * 1.2
-                        q_values[0][1] = q_values[0][1] * 1.2
-                        q_values[0][2] = q_values[0][2] * 1.2
-                        q_values[0][3] = q_values[0][3] * 1.2
-                        q_values[0][4] = q_values[0][4] * 1.1
+                        q_values[0][0] = q_values[0][0] * 1.5
+                        q_values[0][1] = q_values[0][1] * 1.5
+                        q_values[0][2] = q_values[0][2] * 1.5
+                        q_values[0][3] = q_values[0][3] * 1.5
+                        q_values[0][4] = q_values[0][4] * 1.5
                     # Decrease the life_time of all repeat action
                     action_code = torch.argmax(q_values).item()
                     update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
@@ -173,7 +155,7 @@ class DQN(nn.Module):
 
     def sample_experiences(self, replay_buffer, experience_buffer, batch_size):
         # Calculate the number of samples from each source
-        replay_samples = int(0.7 * batch_size)
+        replay_samples = int(0.9 * batch_size)
         experience_samples = batch_size - replay_samples
 
         # Sample from replay buffer
@@ -218,6 +200,9 @@ class DQN(nn.Module):
         # Compute Q-values for current states
         current_q_values = self(states).gather(1, actions.unsqueeze(1)).squeeze(1) + 1e-9
 
+        # Max Q-values action number for next states
+        best_next_actions = self(next_states).max(1)[1]
+
 
         # Compute Q-values for next states
         with torch.no_grad():
@@ -225,18 +210,21 @@ class DQN(nn.Module):
                 next_q_values = self(next_states).max(1)[0] + 1e-9
             elif target_model is not None:
                 target_model.to(device)
-                next_q_values = target_model(next_states).max(1)[0] + 1e-9
-        target_q_values = rewards + (1 - dones.float()/batch_size) * self.gamma * next_q_values
+                # Take the best action from the target model
+                next_q_values = target_model(next_states).gather(1, best_next_actions.unsqueeze(1)).squeeze(1) + 1e-9
+
+        target_q_values = rewards + (1 - dones.float().sum()/batch_size) * self.gamma * next_q_values
         # For done states, the target Q-value is equal to the reward
         target_q_values[dones] = rewards[dones]
 
         if self.epoch % 10 == 0:
             if target_q_values.sum() < 0:
-                self.exploration_prob = min(self.exploration_prob + 0.01, 1.5)
+                self.exploration_prob = min(self.exploration_prob + 0.05, 0.15)
 
         # Rescale target Q-values and current Q-values to [0,1]
         target_q_values = (target_q_values - target_q_values.min()) / ((target_q_values.max() - target_q_values.min()) + 1e-9)
         current_q_values = (current_q_values - current_q_values.min()) / ((current_q_values.max() - current_q_values.min()) + 1e-9)
+        next_q_values = (next_q_values - next_q_values.min()) / ((next_q_values.max() - next_q_values.min()) + 1e-9)
 
 
         # Compute loss
@@ -251,6 +239,7 @@ class DQN(nn.Module):
                 "sum of rewards": rewards.sum(),
                 "sum of target Q-values": target_q_values.sum(),
                 "sum of current Q-values": current_q_values.sum(),
+                "sum of next Q-values": next_q_values.sum(),
                 "loss": loss.item(),
                 "exploration_prob": self.exploration_prob,
                 "score": sum(self.scores) / len(self.scores),
@@ -259,23 +248,23 @@ class DQN(nn.Module):
         self.rewards_list.append(rewards.sum().to('cpu').detach().numpy())
 
 
-        if self.epoch % 50 == 0:
+        if self.epoch % 10 == 0:
             if target_model is not None:
                 # Copy Parameters from the model to the target model
                 target_model.load_state_dict(self.state_dict())
 
 
         
-        if self.epoch % 50 == 0 and self.epoch != 0:
+        if self.epoch % 100 == 0 and self.epoch != 0:
             if is_downstream_trend(self.rewards_list):
                 # Uptune exploration probability by 0.1
-                self.exploration_prob = min(self.exploration_prob + 0.01, 1.5)
+                self.exploration_prob = min(self.exploration_prob + 0.05, 0.15)
                 # Reset rewards
                 self.rewards_list = []
 
 
         # If after 100 epochs, save the model
-        if self.epoch % 100 == 0:
+        if self.epoch % 500 == 0:
             if not os.path.exists(os.path.join(os.path.dirname(__file__), 'checkpoints')):
                 os.mkdir(os.path.join(os.path.dirname(__file__), 'checkpoints'))
             self.save(os.path.join(os.path.dirname(__file__), 'checkpoints', 'Li_DQN_agent' + '_' + str(self.epoch) + '.' + 'pt'))
@@ -399,18 +388,31 @@ def repeat_action(action_buffer: List, action_buffer_size: int) -> int:
     if len(action_buffer) >= action_buffer_size:
         # UP Repeat 5 times in a 10 steps window
         if action_buffer.count('UP') >= action_buffer_size // 2 - 1:
-            return 0
+            # Pop 3 elements from the action buffer
+            for _ in range(3):
+                action_buffer.pop(0)
+            return 0, action_buffer.copy()
         elif action_buffer.count('RIGHT') >= action_buffer_size // 2 - 1:
-            return 1
+            for _ in range(3):
+                action_buffer.pop(0)
+            return 1, action_buffer.copy()
         elif action_buffer.count('DOWN') >= action_buffer_size // 2 - 1:
-            return 2
+            for _ in range(3):
+                action_buffer.pop(0)
+            return 2, action_buffer.copy()
         elif action_buffer.count('LEFT') >= action_buffer_size // 2 - 1:
-            return 3
-        elif action_buffer.count('WAIT') >= action_buffer_size // 2 - 1:
-            return 4
-        elif action_buffer.count('BOMB') >= action_buffer_size // 2 - 1:
-            return 5
-    return -1
+            for _ in range(3):
+                action_buffer.pop(0)
+            return 3, action_buffer.copy()
+        elif action_buffer.count('WAIT') >= action_buffer_size // 2 - 2:
+            for _ in range(2):
+                action_buffer.pop(0)
+            return 4, action_buffer.copy()
+        elif action_buffer.count('BOMB') >= action_buffer_size // 2 - 2:
+            for _ in range(2):
+                action_buffer.pop(0)
+            return 5, action_buffer.copy()
+    return -1, action_buffer.copy()
 
 
 def compute_td_loss(model, target_model, experiences, gamma=0.99, device=DEVICE):

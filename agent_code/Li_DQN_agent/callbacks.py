@@ -8,11 +8,12 @@ from .DQN_network import DQN, ExperienceDataset, ReplayBuffer
 import logging
 
 
-EXPERIENCE_BUFFER_SIZE = 3000000
-REPLAY_BUFFER_SIZE = 1000
+EXPERIENCE_BUFFER_SIZE = 1000000
+REPLAY_BUFFER_SIZE = 400
 
 MODEL_NAME = 'Li_DQN_agent'
-LAST_EPISODE = 0
+LAST_EPISODE = 5000
+INPUT_CHANNELS = 15
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_' + str(LAST_EPISODE) + '.pt')
@@ -22,9 +23,9 @@ def setup(self):
     self.logger.info('Successfully entered setup code')
 
     # Setup the model
-    self.model = DQN(input_channels=24, output_size=6)
+    self.model = DQN(input_channels=INPUT_CHANNELS, output_size=6)
     self.model.epoch = LAST_EPISODE
-    self.target_model = DQN(input_channels=24, output_size=6)
+    self.target_model = DQN(input_channels=INPUT_CHANNELS, output_size=6)
 
     # Store the last state and action
     self.last_state = None
@@ -50,19 +51,23 @@ def setup(self):
 
     # Set a action buffer with size 10
     self.action_buffer = []
-    self.action_buffer_size = 10
+    self.action_buffer_size = 8
 
     if self.train:
-        if not os.path.exists(MODEL_PATH):
-            self.model.init_parameters()
-            # Copy the model parameters to the target model
-            self.target_model.load_state_dict(self.model.state_dict())
-            self.logger.info('Model parameters initialized for training')
-        elif os.path.exists(MODEL_PATH):
+        print(f'Model path: {MODEL_PATH}')
+        model_exists = os.path.exists(MODEL_PATH)
+        print(f'Model exists: {model_exists}')
+        if model_exists:
             self.model.load(MODEL_PATH)
             self.target_model.load(MODEL_PATH)
             self.model.exploration_prob = 0.1
             self.logger.info('Model for training loaded')
+        elif not model_exists:
+            self.model.init_parameters()
+            # Copy the model parameters to the target model
+            self.target_model.load_state_dict(self.model.state_dict())
+            self.logger.info('Model parameters initialized for training')
+    
     else:
         self.model.load(MODEL_PATH)
         self.model.eval()
@@ -93,6 +98,18 @@ def act(agent, game_state: dict):
 
     # Convert the action index to the corresponding action string
     action_string = ACTIONS[action]
+
+    if len(agent.action_buffer) < agent.action_buffer_size:
+        agent.action_buffer.append(action_string)
+    else:
+        agent.action_buffer.pop(0)
+        agent.action_buffer.append(action_string)
+
+    if len(agent.model.action_buffer) < agent.action_buffer_size:
+        agent.model.action_buffer.append(action_string)
+    else:
+        agent.model.action_buffer.pop(0)
+        agent.model.action_buffer.append(action_string)
 
     agent.logger.info(f'Action: {action_string}')
 

@@ -135,22 +135,28 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
         # UP Repeat 5 times in a 10 steps window
         if self.action_buffer.count('UP') >= self.action_buffer_size // 2 - 1:
             events.append('UP_REPEAT')
-            self.action_buffer.clear()
+            # Pop the first element
+            for _ in range(3):
+                self.action_buffer.pop(0)
         elif self.action_buffer.count('RIGHT') >= self.action_buffer_size // 2 - 1:
             events.append('RIGHT_REPEAT')
-            self.action_buffer.clear()
+            for _ in range(3):
+                self.action_buffer.pop(0)
         elif self.action_buffer.count('DOWN') >= self.action_buffer_size // 2 - 1:
             events.append('DOWN_REPEAT')
-            self.action_buffer.clear()
+            for _ in range(3):
+                self.action_buffer.pop(0)
         elif self.action_buffer.count('LEFT') >= self.action_buffer_size // 2 - 1:
             events.append('LEFT_REPEAT')
-            self.action_buffer.clear()
-        elif self.action_buffer.count('WAIT') >= self.action_buffer_size // 2 - 1:
+            for _ in range(3):
+                self.action_buffer.pop(0)
+        elif self.action_buffer.count('WAIT') >= self.action_buffer_size // 2 - 2:
             events.append('WAIT_REPEAT')
-            self.action_buffer.clear()
-        elif self.action_buffer.count('BOMB') >= self.action_buffer_size // 2 - 1:
-            self.action_buffer.clear()
-
+            for _ in range(2):
+                self.action_buffer.pop(0)
+        elif self.action_buffer.count('BOMB') >= self.action_buffer_size // 2 - 2:
+            for _ in range(2):
+                self.action_buffer.pop(0)
     events.append(self_action)
 
     return events
@@ -207,6 +213,7 @@ def end_of_round(self, last_game_state, last_action, events):
 
     # Clear action buffer
     self.action_buffer.clear()
+    self.model.action_buffer.clear()
 
 
 
