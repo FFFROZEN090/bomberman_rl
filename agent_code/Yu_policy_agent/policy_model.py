@@ -169,27 +169,99 @@ class LSTMPolicy(BasePolicy):
 
 # TODO: Fix the Actor-Critic Proximal policy
 class PPOPolicy(BasePolicy):
-    def __init__(self, feature_dim, action_dim=len(ACTIONS), hidden_dim=128, clip_epsilon=0.2, **kwargs):
-        super(PPOPolicy, self).__init__(feature_dim, action_dim, hidden_dim, **kwargs)
-        self.actor = nn.Sequential(
-            nn.Linear(feature_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, action_dim)
-        )
-        self.critic = nn.Sequential(
-            nn.Linear(feature_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1)
-        )
-        self.clip_epsilon = clip_epsilon
+    def __init__(self, feature_dim, action_dim=len(ACTIONS), hidden_dim=128, alpha = 0.1, **kwargs):
+        super(PPOPolicy, self).__init__(feature_dim, hidden_dim, 1, 1, alpha, **kwargs)
+        self.actor_net_fc1 = nn.Linear(feature_dim, hidden_dim)
+        self.actor_net_fc = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(1)])
+        self.actor_net_fc2 = nn.Linear(hidden_dim, action_dim)
+        
+        self.critic_net_fc1 = nn.Linear(feature_dim, hidden_dim)
+        self.critic_net_fc = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(1)])
+        self.critic_net_fc2 = nn.Linear(hidden_dim, 1)
+        
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+        self.criterion = nn.MSELoss()
+        self.alpha = alpha
+        
+        # Episode information
+        self.value_history = [] 
+        
         self.init_optimizer()
+        
+    def forward(self, game_state = None, index=None, print_info = False):
+        if index is None:
+            # record the teacher's action for imitation learning
+            teacher_action, _ = self.teacher.act(game_state)
+            self.teacher_action_history.append(teacher_action)
+            
+            game_state_features = self.state_to_features(game_state)
+            self.game_state_history.append(game_state_features)
+        else:
+            game_state_features = self.game_state_history[index]
+        
+        x = F.relu(self.actor_net_fc1(game_state_features))
+        for fc in self.actor_net_fc:
+            x = F.relu(fc(x))
+        action_probs = F.softmax(self.actor_net_fc2(x), dim=0)
+        
+        x = F.relu(self.critic_net_fc1(game_state_features))
+        for fc in self.critic_net_fc:
+            x = F.relu(fc(x))
+        value = self.critic_net_fc2(x).squeeze()
+        
+        if print_info:
+            print('The state features are: ', game_state_features, 'at the step ', game_state['step'])
+            print('The birth corner is: ', self.birth_corner)
+            print('The output of action is: ', x)
+            print('The action probabilities are: ', action_probs)
+            print('The value is: ', value)
+        return action_probs, value
+    
+    def get_advantage(self, lam = 0.95):
+        # Compute the advantage using Generalized Advantage Estimation
+        advantages = torch.zeros(len(self.rewards))
+        gae = 0
+        for t in reversed(range(len(self.rewards)-1)):
+            delta = self.rewards[t] + self.gamma * self.value_history[t+1] - self.value_history[t]
+            gae = delta + self.gamma * lam * gae
+            advantages[t] = gae
+        return advantages
+    
+    
+    def update(self, game_state, action, reward, next_state, done):
+        self.rewards.append(reward)
+        
+        if done:
+            next_value = 0
+        else:
+            next_value = self.forward(next_state)[1]
+        
+        advantage = self.get_advantage(reward, next_value)
+        
+        # Actor loss
+        action_probs, value = self.forward(game_state)
+        action_prob = action_probs[ACTIONS.index(action)]
+        critic_loss = self.criterion(value, torch.tensor([self.rewards[-1]]))
+        actor_loss = -torch.log(action_prob) * advantage
+        
+        # Clipped loss
+        ratio = torch.exp(torch.log(action_prob) - torch.log(self.action_history[-1]))
+        clipped = torch.clamp(ratio, 1-self.epsilon, 1+self.epsilon) * advantage
+        clipped_loss = -torch.min(actor_loss, clipped)
+        
+        # Total loss
+        loss = clipped_loss + 0.5 * critic_loss
+        
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+        
+        self.value_history.append(value)
+        self.action_history.append(action_prob)
+        
+        self.reset_history()
+        
+        return loss.item()
+    
 
-    def forward(self, features):
-        return F.softmax(self.actor(features), dim=0)
-
-    def evaluate(self, features):
-        return self.critic(features)
-
-    def train(self):
-        # TODO: Implement PPO-specific training logic here
-        pass
+    
