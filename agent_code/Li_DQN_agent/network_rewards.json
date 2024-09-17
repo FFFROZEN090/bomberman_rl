@@ -1,6 +1,6 @@
 {
     "event_rewards": {
-      "e.INVALID_ACTION": -6.0,
+      "e.INVALID_ACTION": -60.0,
       "e.MOVED_LEFT": 30.0,
       "e.MOVED_RIGHT": 30.0,
       "e.MOVED_UP": 30.0,

@@ -13,7 +13,7 @@ REPLAY_BUFFER_SIZE = 400
 
 MODEL_NAME = 'Li_DQN_agent'
 LAST_EPISODE = 5000
-INPUT_CHANNELS = 15
+INPUT_CHANNELS = 16
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_' + str(LAST_EPISODE) + '.pt')
@@ -35,6 +35,9 @@ def setup(self):
 
     # Store last game state
     self.last_game_state = None
+
+    self.bomb_cooldown = 0
+    self.last_action_invalid = False
 
     # Initialize the experience buffer
     self.experience_buffer = ExperienceDataset(EXPERIENCE_BUFFER_SIZE)
@@ -88,10 +91,11 @@ def act(agent, game_state: dict):
         elif agent.spwan_position[0] == 1 and agent.spwan_position[1] == 15:
             agent.rotate = 270
     # Get the current state representation
-    current_state = get_state(game_state, rotate=agent.rotate)
+    current_state = get_state(game_state, rotate=agent.rotate, bomb_valid=game_state['self'][2])
 
     # Use the model to choose an action
-    action, action_type = agent.model.action(current_state)
+    action, action_type = agent.model.action(current_state, agent.last_action_invalid, agent.last_action)
+    agent.last_action = ACTIONS[action]
 
     # Rotate the action by 90, 180, 270 degrees
     action = rotate_action(action, agent.rotate)
@@ -114,6 +118,7 @@ def act(agent, game_state: dict):
     agent.logger.info(f'Action: {action_string}')
 
     agent.last_action_type = action_type
+
 
     return action_string
 

@@ -90,11 +90,17 @@ class DQN(nn.Module):
         return self.model(x)
 
 
-    def action(self, state, device=DEVICE):
+    def action(self, state, last_action_invalid=False ,last_action=None, device=DEVICE):
+        if last_action is not None:
+            last_action = ACTIONS.index(last_action)
         if np.random.rand() < self.exploration_prob:
             # Update the exploration probability
             self.exploration_prob *= self.decay_rate
-            action_code = np.random.randint(0, self.output_size)
+            # if last action is invalid, choose a random action that is not equal to the last action
+            if last_action_invalid and last_action != None:
+                action_code = np.random.choice([i for i in range(6) if i != last_action])
+            else:
+                action_code = np.random.choice(6)
             update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
             return action_code, "exploration"
         else:
@@ -106,44 +112,12 @@ class DQN(nn.Module):
                 if repeat_action_code != -1:
                     #decrease the corresponding q_value to 10%
                     q_values[0][repeat_action_code] = q_values[0][repeat_action_code] * 0.1
-                    # If the action is UP, increase the q_value of DOWN; If the action is RIGHT, increase the q_value of LEFT
-                    if repeat_action_code == 0:
-                        q_values[0][2] = q_values[0][2] * 1.5
-                        q_values[0][3] = q_values[0][3] * 1.5
-                        q_values[0][1] = q_values[0][1] * 1.5
-                        q_values[0][4] = q_values[0][4] * 1.5
-                        q_values[0][5] = q_values[0][5] * 1.5
-                    elif repeat_action_code == 1:
-                        q_values[0][3] = q_values[0][3] * 1.5
-                        q_values[0][0] = q_values[0][0] * 1.5
-                        q_values[0][2] = q_values[0][2] * 1.5
-                        q_values[0][4] = q_values[0][4] * 1.5
-                        q_values[0][5] = q_values[0][5] * 1.5
-                    elif repeat_action_code == 2:
-                        q_values[0][0] = q_values[0][0] * 1.5
-                        q_values[0][1] = q_values[0][1] * 1.5
-                        q_values[0][3] = q_values[0][3] * 1.5
-                        q_values[0][4] = q_values[0][4] * 1.5
-                        q_values[0][5] = q_values[0][5] * 1.5
-                    elif repeat_action_code == 3:
-                        q_values[0][1] = q_values[0][1] * 1.5
-                        q_values[0][0] = q_values[0][0] * 1.5
-                        q_values[0][2] = q_values[0][2] * 1.5
-                        q_values[0][4] = q_values[0][4] * 1.5
-                        q_values[0][5] = q_values[0][5] * 1.5
-                    elif repeat_action_code == 4:
-                        q_values[0][0] = q_values[0][0] * 1.5
-                        q_values[0][1] = q_values[0][1] * 1.5
-                        q_values[0][2] = q_values[0][2] * 1.5
-                        q_values[0][3] = q_values[0][3] * 1.5
-                        q_values[0][5] = q_values[0][5] * 1.5
-                    elif repeat_action_code == 5:
-                        q_values[0][0] = q_values[0][0] * 1.5
-                        q_values[0][1] = q_values[0][1] * 1.5
-                        q_values[0][2] = q_values[0][2] * 1.5
-                        q_values[0][3] = q_values[0][3] * 1.5
-                        q_values[0][4] = q_values[0][4] * 1.5
                     # Decrease the life_time of all repeat action
+                    action_code = torch.argmax(q_values).item()
+                    update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
+                    return action_code, "network"
+                elif repeat_action_code == -1 and last_action_invalid and last_action != None:
+                    q_values[0][last_action] = q_values[0][last_action] * 0.1
                     action_code = torch.argmax(q_values).item()
                     update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
                     return action_code, "network"

@@ -263,15 +263,17 @@ def coin_target(state):
     
     return distance_int 
 
-def get_state(game_state, rotate):
+def get_state(game_state, rotate, bomb_valid=False):
     # Initialize the state
-    state = np.zeros((15, 17, 17), dtype=np.int8)
+    state = np.zeros((16, 17, 17), dtype=np.int8)
     low_level_state = get_low_level_state(game_state, rotate)
     high_level_state = get_high_level_state(low_level_state)
 
     # Concatenate the low level state and high level state
     state[:10, :, :] = low_level_state
-    state[10:, :, :] = high_level_state
+    state[10:15, :, :] = high_level_state
+    # All value in 16th channel is the bomb cooldown
+    state[15, :, :] = bomb_valid
     return state
 
 

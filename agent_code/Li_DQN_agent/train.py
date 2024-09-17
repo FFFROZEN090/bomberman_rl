@@ -60,11 +60,13 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     
     events = calculate_events(self, old_game_state, self_action, new_game_state, events)
 
+    self.last_action_invalid = e.INVALID_ACTION in events
+
     # Get DQN state
-    state = get_state(new_game_state, rotate=self.rotate)
+    state = get_state(new_game_state, rotate=self.rotate, bomb_valid=new_game_state['self'][2])
 
     # Get old state
-    old_state = get_state(old_game_state, self.rotate)
+    old_state = get_state(old_game_state, rotate=self.rotate, bomb_valid=old_game_state['self'][2])
 
     # Get reward
     reward = calculate_reward(events, self.last_action_type)
@@ -167,11 +169,13 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
 def end_of_round(self, last_game_state, last_action, events): 
     self.logger.debug(f'Encountered game event(s) {", ".join([event for event in events])}')
 
+    self.last_action_invalid = e.INVALID_ACTION in events
+
     # Get DQN state
-    state = get_state(last_game_state, rotate=self.rotate)
+    state = get_state(last_game_state, rotate=self.rotate, bomb_valid=False)
 
     # Get old state
-    old_state = get_state(last_game_state, rotate=self.rotate)
+    old_state = get_state(last_game_state, rotate=self.rotate, bomb_valid=last_game_state['self'][2])
 
     # Get reward
     reward = calculate_reward(events, self.last_action_type)
