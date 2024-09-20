@@ -6,6 +6,9 @@ import os
 import torch
 import numpy as np
 from collections import deque
+from random import shuffle
+
+SEARCH_DEPTH = 4
 
 """
 Converts the game state into a 17x17x14 numpy array representation.
@@ -59,16 +62,15 @@ def get_low_level_state(game_state, rotate=0):
     for bomb_pos, countdown in bombs:
         state[7, bomb_pos[0], bomb_pos[1]] = countdown + 1
         # Add bomb danger zones
-        for dx in range(-2, 3):
-            for dy in range(-2, 3):
-                if abs(dx) + abs(dy) <= 2:  # Manhattan distance <= 2
+        for dx in range(-3, 4):
+            for dy in range(-3, 4):
+                if abs(dx) + abs(dy) <= 3:  # Manhattan distance <= 2
                     nx, ny = x + dx, y + dy
                     if 0 <= nx < 17 and 0 <= ny < 17:  # Check boundaries
                         state[7, nx, ny] = max(state[7, nx, ny], countdown + 1)
 
-
     # Add explosion map
-    state[8, :, :] = np.where(explosion_map == 1, 1, 0)
+    state[8, :, :] = np.where(explosion_map >= 1, 1, 0)
 
     # Rotate the state if necessary
     state = rotate_state(state.copy(), rotate)
@@ -104,14 +106,14 @@ Output: 5x17x17 high level state
 """
 def get_high_level_state(state):
     # Create a 17x17x8 numpy array representation
-    high_level_state = np.zeros((5, 17, 17), dtype=np.int8)
+    high_level_state = np.zeros((6, 17, 17), dtype=np.int8)
 
     # Blocked areas (channel 0)
     high_level_state[0, :, :] = np.any(state[[1, 2, 3, 4, 5], :, :] == 1, axis=0)  # Other players, brick walls, boxes
 
     # Safe areas (channel 1) : check the cell is empty and channel 7 is 0
     high_level_state[1, :, :] = np.where(state[9, :, :] == 1, 1, 0)  # Empty cells are safe
-    high_level_state[1, :, :] = np.where(state[7, :, :] == 1, 0, high_level_state[1, :, :])  # Bomb countdown cells are not safe
+    high_level_state[1, :, :] = np.where(state[7, :, :] >= 1, 0, high_level_state[1, :, :])  # Bomb countdown cells are not safe
 
     # Destroyable blocks (channel 2)
     high_level_state[2, :, :] = np.any(state[[1, 2, 3, 5], :, :] == 1, axis=0)  # Players are destroyable
@@ -122,7 +124,86 @@ def get_high_level_state(state):
     # Safe spots areas (channel 4)
     high_level_state[4, :, :] = safe_spots(state)
 
+    # Distance to safe area (channel 5)
+    high_level_state[5, :, :] = distance_to_empty_cells(state)
+
     return high_level_state
+
+def distance_to_empty_cells(state):
+    import numpy as np
+    from collections import deque
+
+    # Find agent's position (player 0)
+    player_pos = np.where(state[0, :, :] == 1)
+    agent_x, agent_y = player_pos[0][0], player_pos[1][0]
+
+    # Define 7x7 grid boundaries around the agent
+    x_min = max(0, agent_x - SEARCH_DEPTH)
+    x_max = min(16, agent_x + SEARCH_DEPTH)
+    y_min = max(0, agent_y - SEARCH_DEPTH)
+    y_max = min(16, agent_y + SEARCH_DEPTH)
+
+    # Define empty cells within the 7x7 grid
+    # Empty cells are positions where there is:
+    # - No brick wall (state[4] == 0)
+    # - No box (state[5] == 0)
+    # - No bomb countdown (state[7] == 0)
+    # - No blast area (state[8] == 0)
+    # Note: Other players are ignored when identifying empty cells
+    empty_cells = np.zeros((17, 17), dtype=bool)
+    for x in range(x_min, x_max + 1):
+        for y in range(y_min, y_max + 1):
+            if (
+                (state[4, x, y] == 0) and  # Not a brick wall
+                (state[5, x, y] == 0) and  # Not a box
+                (state[7, x, y] == 0) and  # No bomb countdown
+                (state[8, x, y] == 0)      # Not a blast area
+            ):
+                empty_cells[x, y] = True
+
+    # Initialize distance matrix with infinity
+    distance = np.full((17, 17), np.inf)
+    distance[agent_x, agent_y] = 0
+
+    # Define blocked positions for BFS traversal
+    # Positions are blocked if they are:
+    # - Brick walls (state[4] == 1)
+    # - Boxes (state[5] == 1)
+    # - Other players (state[1], state[2], state[3] == 1)
+    # Note: Bomb countdown areas are not blocked
+    blocked = (
+        (state[4, :, :] == 1) |  # Brick walls
+        (state[5, :, :] == 1) |  # Boxes
+        (state[1, :, :] == 1) |  # Other player 1
+        (state[2, :, :] == 1) |  # Other player 2
+        (state[3, :, :] == 1)    # Other player 3
+    )
+
+    # Initialize BFS queue
+    queue = deque()
+    queue.append((agent_x, agent_y))
+
+    # Perform BFS to compute distances to empty cells
+    while queue:
+        current_x, current_y = queue.popleft()
+        for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+            neighbor_x = current_x + dx
+            neighbor_y = current_y + dy
+            if x_min <= neighbor_x <= x_max and y_min <= neighbor_y <= y_max:
+                if not blocked[neighbor_x, neighbor_y]:
+                    if distance[neighbor_x, neighbor_y] > distance[current_x, current_y] + 1:
+                        distance[neighbor_x, neighbor_y] = distance[current_x, current_y] + 1
+                        queue.append((neighbor_x, neighbor_y))
+
+    # Convert distances to integers and fill the distance matrix
+    # Only for empty cells
+    distance_int = np.zeros((17, 17), dtype=np.int8)
+    for x in range(x_min, x_max + 1):
+        for y in range(y_min, y_max + 1):
+            if empty_cells[x, y] and np.isfinite(distance[x, y]):
+                distance_int[x, y] = int(distance[x, y])
+
+    return distance_int
 
 """ 
 Around 7x7 area of our player, find the safe spots.
@@ -135,10 +216,10 @@ def safe_spots(state):
     agent_x, agent_y = player_pos[0][0], player_pos[1][0]
 
     # Define 7x7 grid boundaries around the agent
-    x_min = max(0, agent_x - 6)
-    x_max = min(16, agent_x + 6)
-    y_min = max(0, agent_y - 6)
-    y_max = min(16, agent_y + 6)
+    x_min = max(0, agent_x - SEARCH_DEPTH)
+    x_max = min(16, agent_x + SEARCH_DEPTH)
+    y_min = max(0, agent_y - SEARCH_DEPTH)
+    y_max = min(16, agent_y + SEARCH_DEPTH)
 
     # Initialize distance matrix with infinity
     distance = np.full((17, 17), np.inf)
@@ -216,10 +297,10 @@ def coin_target(state):
         return np.zeros((17, 17), dtype=np.int8)
     
     # Define 7x7 grid boundaries around the agent
-    x_min = max(0, agent_x - 6)
-    x_max = min(16, agent_x + 6)
-    y_min = max(0, agent_y - 6)
-    y_max = min(16, agent_y + 6)
+    x_min = max(0, agent_x - SEARCH_DEPTH)
+    x_max = min(16, agent_x + SEARCH_DEPTH)
+    y_min = max(0, agent_y - SEARCH_DEPTH)
+    y_max = min(16, agent_y + SEARCH_DEPTH)
     
     # Initialize distance matrix with infinity
     distance = np.full((17, 17), np.inf)
@@ -265,16 +346,144 @@ def coin_target(state):
 
 def get_state(game_state, rotate, bomb_valid=False):
     # Initialize the state
-    state = np.zeros((16, 17, 17), dtype=np.int8)
+    state = np.zeros((17, 17, 17), dtype=np.int8)
     low_level_state = get_low_level_state(game_state, rotate)
     high_level_state = get_high_level_state(low_level_state)
 
     # Concatenate the low level state and high level state
     state[:10, :, :] = low_level_state
-    state[10:15, :, :] = high_level_state
+    state[10:16, :, :] = high_level_state
     # All value in 16th channel is the bomb cooldown
-    state[15, :, :] = bomb_valid
+    state[16, :, :] = bomb_valid
     return state
+
+def rule_based_action(agent, game_state):
+    """
+    Called each game step to determine the agent's next action.
+
+    You can find out about the state of the game environment via game_state,
+    which is a dictionary. Consult 'get_state_for_agent' in environment.py to see
+    what it contains.
+    """
+    agent.logger.info('Picking action according to rule set')
+    # Check if we are in a different round
+    if game_state["round"] != agent.current_round:
+        reset_self(agent)
+        agent.current_round = game_state["round"]
+    # Gather information about the game state
+    arena = game_state['field']
+    _, score, bombs_left, (x, y) = game_state['self']
+    bombs = game_state['bombs']
+    bomb_xys = [xy for (xy, t) in bombs]
+    others = [xy for (n, s, b, xy) in game_state['others']]
+    coins = game_state['coins']
+    bomb_map = np.ones(arena.shape) * 5
+    for (xb, yb), t in bombs:
+        for (i, j) in [(xb + h, yb) for h in range(-3, 4)] + [(xb, yb + h) for h in range(-3, 4)]:
+            if (0 < i < bomb_map.shape[0]) and (0 < j < bomb_map.shape[1]):
+                bomb_map[i, j] = min(bomb_map[i, j], t)
+
+    # If agent has been in the same location three times recently, it's a loop
+    if agent.coordinate_history.count((x, y)) > 2:
+        agent.ignore_others_timer = 5
+    else:
+        agent.ignore_others_timer -= 1
+    agent.coordinate_history.append((x, y))
+
+    # Check which moves make sense at all
+    directions = [(x, y), (x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+    valid_tiles, valid_actions = [], []
+    for d in directions:
+        if ((arena[d] == 0) and
+                (game_state['explosion_map'][d] < 1) and
+                (bomb_map[d] > 0) and
+                (not d in others) and
+                (not d in bomb_xys)):
+            valid_tiles.append(d)
+    if (x - 1, y) in valid_tiles: valid_actions.append('LEFT')
+    if (x + 1, y) in valid_tiles: valid_actions.append('RIGHT')
+    if (x, y - 1) in valid_tiles: valid_actions.append('UP')
+    if (x, y + 1) in valid_tiles: valid_actions.append('DOWN')
+    if (x, y) in valid_tiles: valid_actions.append('WAIT')
+    # Disallow the BOMB action if agent dropped a bomb in the same spot recently
+    if (bombs_left > 0) and (x, y) not in agent.bomb_history: valid_actions.append('BOMB')
+    agent.logger.debug(f'Valid actions: {valid_actions}')
+
+    # Collect basic action proposals in a queue
+    # Later on, the last added action that is also valid will be chosen
+    action_ideas = ['UP', 'DOWN', 'LEFT', 'RIGHT']
+    shuffle(action_ideas)
+
+    # Compile a list of 'targets' the agent should head towards
+    cols = range(1, arena.shape[0] - 1)
+    rows = range(1, arena.shape[0] - 1)
+    dead_ends = [(x, y) for x in cols for y in rows if (arena[x, y] == 0)
+                 and ([arena[x + 1, y], arena[x - 1, y], arena[x, y + 1], arena[x, y - 1]].count(0) == 1)]
+    crates = [(x, y) for x in cols for y in rows if (arena[x, y] == 1)]
+    targets = coins + dead_ends + crates
+    # Add other agents as targets if in hunting mode or no crates/coins left
+    if agent.ignore_others_timer <= 0 or (len(crates) + len(coins) == 0):
+        targets.extend(others)
+
+    # Exclude targets that are currently occupied by a bomb
+    targets = [targets[i] for i in range(len(targets)) if targets[i] not in bomb_xys]
+
+    # Take a step towards the most immediately interesting target
+    free_space = arena == 0
+    if agent.ignore_others_timer > 0:
+        for o in others:
+            free_space[o] = False
+    d = look_for_targets(free_space, (x, y), targets, agent.logger)
+    if d == (x, y - 1): action_ideas.append('UP')
+    if d == (x, y + 1): action_ideas.append('DOWN')
+    if d == (x - 1, y): action_ideas.append('LEFT')
+    if d == (x + 1, y): action_ideas.append('RIGHT')
+    if d is None:
+        agent.logger.debug('All targets gone, nothing to do anymore')
+        action_ideas.append('WAIT')
+
+    # Add proposal to drop a bomb if at dead end
+    if (x, y) in dead_ends:
+        action_ideas.append('BOMB')
+    # Add proposal to drop a bomb if touching an opponent
+    if len(others) > 0:
+        if (min(abs(xy[0] - x) + abs(xy[1] - y) for xy in others)) <= 1:
+            action_ideas.append('BOMB')
+    # Add proposal to drop a bomb if arrived at target and touching crate
+    if d == (x, y) and ([arena[x + 1, y], arena[x - 1, y], arena[x, y + 1], arena[x, y - 1]].count(1) > 0):
+        action_ideas.append('BOMB')
+
+    # Add proposal to run away from any nearby bomb about to blow
+    for (xb, yb), t in bombs:
+        if (xb == x) and (abs(yb - y) < 4):
+            # Run away
+            if (yb > y): action_ideas.append('UP')
+            if (yb < y): action_ideas.append('DOWN')
+            # If possible, turn a corner
+            action_ideas.append('LEFT')
+            action_ideas.append('RIGHT')
+        if (yb == y) and (abs(xb - x) < 4):
+            # Run away
+            if (xb > x): action_ideas.append('LEFT')
+            if (xb < x): action_ideas.append('RIGHT')
+            # If possible, turn a corner
+            action_ideas.append('UP')
+            action_ideas.append('DOWN')
+    # Try random direction if directly on top of a bomb
+    for (xb, yb), t in bombs:
+        if xb == x and yb == y:
+            action_ideas.extend(action_ideas[:4])
+
+    # Pick last action added to the proposals list that is also valid
+    while len(action_ideas) > 0:
+        a = action_ideas.pop()
+        if a in valid_actions:
+            # Keep track of chosen action for cycle detection
+            if a == 'BOMB':
+                agent.bomb_history.append((x, y))
+
+            return a
+
 
 
 """

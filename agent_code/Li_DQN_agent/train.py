@@ -53,10 +53,9 @@ def setup_training(self):
 
 # TODO: Verify the game event, update the model, reward, experience
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[dict]) -> None:
-    self.logger.debug(f'Encountered game event(s) {", ".join([event for event in events])}')
-
-    # print agent position
-    self.logger.info(f'Agent position: {old_game_state["self"][3]}')
+    # Get Last Action number
+    action_number = ACTIONS.index(self_action)
+    action_number = inverse_rotate_action(action_number, self.rotate)
     
     events = calculate_events(self, old_game_state, self_action, new_game_state, events)
 
@@ -74,25 +73,18 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     if self.last_action is None:
         self.last_action = self_action
 
-    # Get Last Action number
-    action_number = ACTIONS.index(self_action)
-
     # If self.last_reward is not None, then store the experience
-    if self.last_reward is not None and self.last_action is not None:
-        self.experience_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
-        self.replay_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
+
+    self.experience_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
+    self.replay_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
 
     # Update last reward
     self.last_reward = reward
 
     self.logger.info(f'Events: {events}')
 
-    if len(self.replay_buffer) == self.batch_size:
+    if len(self.replay_buffer) >= self.batch_size:
         self.model.dqn_train(self.replay_buffer, self.experience_buffer, self.batch_size, self.target_model)
-
-        # Update the epoch
-        self.model.epoch += 1
-
         self.replay_buffer.clear()
 
     self.surving_rounds += 1
@@ -101,7 +93,7 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
     # add position to visited history
     self.visited_history.append(new_game_state['self'][3])
     # check if the agent is in a loop, if so, add an event to events list
-    if self.visited_history.count(new_game_state['self'][3]) > 4:
+    if self.visited_history.count(new_game_state['self'][3]) > 3:
         events.append(LOOP_DETECTED)
     
     # distance to coins: if getting close to coins, add an event to events list
@@ -131,8 +123,6 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
             if (0 < i < crates.shape[0]) and (0 < j < crates.shape[1]) and crates[i, j] and bombs_time[i, j] == 5:
                 events.append(BOMB_DROPPED_FOR_CRATE)
 
-    # Events for Repeat Actions, if one action repeats more than 5 times, add an event to events list, the action buffer size is 10
-    ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
     if len(self.action_buffer) == self.action_buffer_size:
         # UP Repeat 5 times in a 10 steps window
         if self.action_buffer.count('UP') >= self.action_buffer_size // 2 - 1:
@@ -152,22 +142,33 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
             events.append('LEFT_REPEAT')
             for _ in range(3):
                 self.action_buffer.pop(0)
-        elif self.action_buffer.count('WAIT') >= self.action_buffer_size // 2 - 2:
+        elif self.action_buffer.count('WAIT') >= self.action_buffer_size // 2 - 3:
             events.append('WAIT_REPEAT')
             for _ in range(2):
                 self.action_buffer.pop(0)
-        elif self.action_buffer.count('BOMB') >= self.action_buffer_size // 2 - 2:
+        elif self.action_buffer.count('BOMB') >= self.action_buffer_size // 2 - 3:
+            events.append('BOMB_REPEAT')
             for _ in range(2):
                 self.action_buffer.pop(0)
+    
+    if not self.last_action_invalid and self.last_action is not None:
+        if ACTIONS.index(self.last_action) < 4:
+            if (ACTIONS.index(self.last_action) + 1 ) % 4 == ACTIONS.index(self_action) or (ACTIONS.index(self.last_action) - 1 ) % 4 == ACTIONS.index(self_action) and 'INVALID_ACTION' not in events:
+                events.append('TURN_AROUND')
+
     events.append(self_action)
 
     return events
-                    
-    
+
+
 
 # TODO: Verify the end of the game, update the model, score, reward, and log the game info
 def end_of_round(self, last_game_state, last_action, events): 
-    self.logger.debug(f'Encountered game event(s) {", ".join([event for event in events])}')
+    # Get Action number
+    action_number = ACTIONS.index(last_action)
+    action_number = inverse_rotate_action(action_number, self.rotate)
+
+    events = calculate_events(self, last_game_state, last_action, last_game_state, events)
 
     self.last_action_invalid = e.INVALID_ACTION in events
 
@@ -180,22 +181,14 @@ def end_of_round(self, last_game_state, last_action, events):
     # Get reward
     reward = calculate_reward(events, self.last_action_type)
 
-    # Get Action number
-    action_number = ACTIONS.index(last_action)
 
-    # If self.last_reward is not None, then store the experience
-    if self.last_reward is not None and self.last_action is not None:
-        self.experience_buffer.add(Experience(old_state, None, action_number, reward, state, None, True))
-        self.replay_buffer.add(Experience(old_state, None, action_number, reward, state, None, True))
+    self.experience_buffer.add(Experience(old_state, None, action_number, reward, state, None, True))
+    self.replay_buffer.add(Experience(old_state, None, action_number, reward, state, None, True))
 
     self.logger.info(f'Events: {events}')
 
-    if len(self.replay_buffer) == self.batch_size:
+    if len(self.replay_buffer) >= self.batch_size:
         self.model.dqn_train(self.replay_buffer, self.experience_buffer, self.batch_size, self.target_model)
-
-        # Update the epoch
-        self.model.epoch += 1
-
         self.replay_buffer.clear()
 
     # Reset last reward
@@ -203,7 +196,7 @@ def end_of_round(self, last_game_state, last_action, events):
     self.last_game_state = None
     self.last_state = None
     self.last_action = None
-
+    self.rotate = 0
 
     score = last_game_state['self'][1]
 
@@ -218,8 +211,6 @@ def end_of_round(self, last_game_state, last_action, events):
     # Clear action buffer
     self.action_buffer.clear()
     self.model.action_buffer.clear()
-
-
 
 # Function to load reward settings from a JSON file
 def load_reward_settings(file_path):
@@ -259,4 +250,19 @@ def calculate_reward(events, action_type):
 
     return reward
 
-    
+
+"""
+Inverse the action from raw state to the mirrored state
+"""
+def inverse_rotate_action(rotated_action, angle):
+    # If action is WAIT or BOMB, return the same action
+    if rotated_action == 4 or rotated_action == 5:
+        return rotated_action
+    if angle == 90:
+        return (rotated_action - 1) % 4
+    elif angle == 180:
+        return (rotated_action - 2) % 4
+    elif angle == 270:
+        return (rotated_action - 3) % 4
+    else:
+        return rotated_action

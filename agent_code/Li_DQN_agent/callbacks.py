@@ -6,14 +6,15 @@ import numpy as np
 from .DQN_utils import get_state, get_low_level_state, get_high_level_state
 from .DQN_network import DQN, ExperienceDataset, ReplayBuffer
 import logging
+from collections import deque
 
 
-EXPERIENCE_BUFFER_SIZE = 1000000
+EXPERIENCE_BUFFER_SIZE = 100000
 REPLAY_BUFFER_SIZE = 400
 
 MODEL_NAME = 'Li_DQN_agent'
-LAST_EPISODE = 5000
-INPUT_CHANNELS = 16
+LAST_EPISODE = 4200
+INPUT_CHANNELS = 17
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_' + str(LAST_EPISODE) + '.pt')
@@ -56,6 +57,14 @@ def setup(self):
     self.action_buffer = []
     self.action_buffer_size = 8
 
+    np.random.seed()
+    # Fixed length FIFO queues to avoid repeating the same actions
+    self.bomb_history = deque([], 5)
+    self.coordinate_history = deque([], 20)
+    # While this timer is positive, agent will not hunt/attack opponents
+    self.ignore_others_timer = 0
+    self.current_round = 0
+
     if self.train:
         print(f'Model path: {MODEL_PATH}')
         model_exists = os.path.exists(MODEL_PATH)
@@ -80,25 +89,33 @@ def setup(self):
 
 def act(agent, game_state: dict):
     # For the first step of each round, we record the spawn position
-    if game_state['step'] == 1:
-        agent.spwan_position = game_state['self'][3]
-        if agent.spwan_position[0] == 1 and agent.spwan_position[1] == 1:
-            agent.rotate = 0
-        elif agent.spwan_position[0] == 15 and agent.spwan_position[1] == 1:
-            agent.rotate = 90
-        elif agent.spwan_position[0] == 15 and agent.spwan_position[1] == 15:
-            agent.rotate = 180
-        elif agent.spwan_position[0] == 1 and agent.spwan_position[1] == 15:
-            agent.rotate = 270
+
+    agent.spwan_position = game_state['self'][3]
+    if 8 >= agent.spwan_position[0] >= 1 and 8 >= agent.spwan_position[1] >= 1:
+        agent.rotate = 0
+    elif agent.spwan_position[0] >= 8 and 8 >= agent.spwan_position[1] >= 1:
+        agent.rotate = 90
+    elif agent.spwan_position[0] >= 8 and agent.spwan_position[1] >= 8:
+        agent.rotate = 180
+    elif 8 >= agent.spwan_position[0] >= 1 and agent.spwan_position[1] >= 8:
+        agent.rotate = 270
     # Get the current state representation
     current_state = get_state(game_state, rotate=agent.rotate, bomb_valid=game_state['self'][2])
+
+    # Get Agent's position from current state, first dimension where 1 is present
+    agent_position = np.where(current_state[0] == 1)
+
+    # Print agent position comparison
+    agent.logger.debug(f"Agent position: {agent_position}, Game state position: {game_state['self'][3]}")
+    if game_state['step'] == 1:
+        agent.logger.debug(f"New round started")
 
     # Use the model to choose an action
     action, action_type = agent.model.action(current_state, agent.last_action_invalid, agent.last_action)
     agent.last_action = ACTIONS[action]
+    agent.logger.debug(f'Raw Action: {ACTIONS[action]}, Mirror: {agent.rotate}')
 
-    # Rotate the action by 90, 180, 270 degrees
-    action = rotate_action(action, agent.rotate)
+
 
     # Convert the action index to the corresponding action string
     action_string = ACTIONS[action]
@@ -115,10 +132,13 @@ def act(agent, game_state: dict):
         agent.model.action_buffer.pop(0)
         agent.model.action_buffer.append(action_string)
 
-    agent.logger.info(f'Action: {action_string}')
+    # Rotate the action by 90, 180, 270 degrees
+    action = rotate_action(action, agent.rotate)
+    action_string = ACTIONS[action]
+
+    agent.logger.info(f'Actual Action: {action_string}')
 
     agent.last_action_type = action_type
-
 
     return action_string
 

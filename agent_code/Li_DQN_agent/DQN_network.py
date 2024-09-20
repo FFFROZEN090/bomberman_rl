@@ -111,13 +111,20 @@ class DQN(nn.Module):
                 repeat_action_code, self.action_buffer = repeat_action(self.action_buffer, self.action_buffer_size)
                 if repeat_action_code != -1:
                     #decrease the corresponding q_value to 10%
-                    q_values[0][repeat_action_code] = q_values[0][repeat_action_code] * 0.1
+                    if q_values[0][repeat_action_code] > 0:
+                        q_values[0][repeat_action_code] = q_values[0][repeat_action_code] * 0.01
+                    else:
+                        q_values[0][repeat_action_code] = q_values[0][repeat_action_code] * 10
                     # Decrease the life_time of all repeat action
                     action_code = torch.argmax(q_values).item()
                     update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
                     return action_code, "network"
                 elif repeat_action_code == -1 and last_action_invalid and last_action != None:
-                    q_values[0][last_action] = q_values[0][last_action] * 0.1
+                    if q_values[0][last_action] > 0:
+                        q_values[0][last_action] = q_values[0][last_action] * 0.01
+                    else:
+                        q_values[0][last_action] = q_values[0][last_action] * 10
+                    
                     action_code = torch.argmax(q_values).item()
                     update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
                     return action_code, "network"
@@ -162,6 +169,7 @@ class DQN(nn.Module):
         return states, actions, rewards, next_states, dones
 
     def dqn_train(self, replay_buffer, experience_buffer, batch_size, target_model = None, device=DEVICE):
+        self.epoch += 1
         # Sample experiences
         experiences = self.sample_experiences(replay_buffer, experience_buffer, batch_size)
         
@@ -187,18 +195,11 @@ class DQN(nn.Module):
                 # Take the best action from the target model
                 next_q_values = target_model(next_states).gather(1, best_next_actions.unsqueeze(1)).squeeze(1) + 1e-9
 
-        target_q_values = rewards + (1 - dones.float().sum()/batch_size) * self.gamma * next_q_values
-        # For done states, the target Q-value is equal to the reward
-        target_q_values[dones] = rewards[dones]
+        target_q_values = rewards + (1 - dones.float()) * self.gamma * next_q_values
 
         if self.epoch % 10 == 0:
             if target_q_values.sum() < 0:
                 self.exploration_prob = min(self.exploration_prob + 0.05, 0.15)
-
-        # Rescale target Q-values and current Q-values to [0,1]
-        target_q_values = (target_q_values - target_q_values.min()) / ((target_q_values.max() - target_q_values.min()) + 1e-9)
-        current_q_values = (current_q_values - current_q_values.min()) / ((current_q_values.max() - current_q_values.min()) + 1e-9)
-        next_q_values = (next_q_values - next_q_values.min()) / ((next_q_values.max() - next_q_values.min()) + 1e-9)
 
 
         # Compute loss
@@ -222,14 +223,14 @@ class DQN(nn.Module):
         self.rewards_list.append(rewards.sum().to('cpu').detach().numpy())
 
 
-        if self.epoch % 10 == 0:
+        if self.epoch % 50 == 0:
             if target_model is not None:
                 # Copy Parameters from the model to the target model
                 target_model.load_state_dict(self.state_dict())
 
 
         
-        if self.epoch % 100 == 0 and self.epoch != 0:
+        if self.epoch % 50 == 0 and self.epoch != 0:
             if is_downstream_trend(self.rewards_list):
                 # Uptune exploration probability by 0.1
                 self.exploration_prob = min(self.exploration_prob + 0.05, 0.15)
@@ -238,7 +239,7 @@ class DQN(nn.Module):
 
 
         # If after 100 epochs, save the model
-        if self.epoch % 500 == 0:
+        if self.epoch % 200 == 0:
             if not os.path.exists(os.path.join(os.path.dirname(__file__), 'checkpoints')):
                 os.mkdir(os.path.join(os.path.dirname(__file__), 'checkpoints'))
             self.save(os.path.join(os.path.dirname(__file__), 'checkpoints', 'Li_DQN_agent' + '_' + str(self.epoch) + '.' + 'pt'))
@@ -378,11 +379,11 @@ def repeat_action(action_buffer: List, action_buffer_size: int) -> int:
             for _ in range(3):
                 action_buffer.pop(0)
             return 3, action_buffer.copy()
-        elif action_buffer.count('WAIT') >= action_buffer_size // 2 - 2:
+        elif action_buffer.count('WAIT') >= action_buffer_size // 2 - 3:
             for _ in range(2):
                 action_buffer.pop(0)
             return 4, action_buffer.copy()
-        elif action_buffer.count('BOMB') >= action_buffer_size // 2 - 2:
+        elif action_buffer.count('BOMB') >= action_buffer_size // 2 - 3:
             for _ in range(2):
                 action_buffer.pop(0)
             return 5, action_buffer.copy()
