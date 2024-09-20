@@ -69,9 +69,8 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
     # Get reward
     reward = calculate_reward(events, self.last_action_type)
-    
-    if self.last_action is None:
-        self.last_action = self_action
+
+    self.last_action = self_action
 
     # If self.last_reward is not None, then store the experience
 
@@ -170,7 +169,7 @@ def end_of_round(self, last_game_state, last_action, events):
 
     events = calculate_events(self, last_game_state, last_action, last_game_state, events)
 
-    self.last_action_invalid = e.INVALID_ACTION in events
+    self.last_action_invalid = True
 
     # Get DQN state
     state = get_state(last_game_state, rotate=self.rotate, bomb_valid=False)

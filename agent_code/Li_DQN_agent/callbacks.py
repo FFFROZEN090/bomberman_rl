@@ -13,7 +13,7 @@ EXPERIENCE_BUFFER_SIZE = 100000
 REPLAY_BUFFER_SIZE = 400
 
 MODEL_NAME = 'Li_DQN_agent'
-LAST_EPISODE = 4200
+LAST_EPISODE = 5200
 INPUT_CHANNELS = 17
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
@@ -112,10 +112,7 @@ def act(agent, game_state: dict):
 
     # Use the model to choose an action
     action, action_type = agent.model.action(current_state, agent.last_action_invalid, agent.last_action)
-    agent.last_action = ACTIONS[action]
     agent.logger.debug(f'Raw Action: {ACTIONS[action]}, Mirror: {agent.rotate}')
-
-
 
     # Convert the action index to the corresponding action string
     action_string = ACTIONS[action]
