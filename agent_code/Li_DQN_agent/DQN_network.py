@@ -108,26 +108,6 @@ class DQN(nn.Module):
                 input = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(device)
                 self.to(device)
                 q_values = self.forward(input)
-                repeat_action_code, self.action_buffer = repeat_action(self.action_buffer, self.action_buffer_size)
-                if repeat_action_code != -1:
-                    #decrease the corresponding q_value to 10%
-                    if q_values[0][repeat_action_code] > 0:
-                        q_values[0][repeat_action_code] = q_values[0][repeat_action_code] * 0.01
-                    else:
-                        q_values[0][repeat_action_code] = q_values[0][repeat_action_code] * 10
-                    # Decrease the life_time of all repeat action
-                    action_code = torch.argmax(q_values).item()
-                    update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
-                    return action_code, "network"
-                elif repeat_action_code == -1 and last_action_invalid and last_action != None:
-                    if q_values[0][last_action] > 0:
-                        q_values[0][last_action] = q_values[0][last_action] * 0.01
-                    else:
-                        q_values[0][last_action] = q_values[0][last_action] * 10
-                    
-                    action_code = torch.argmax(q_values).item()
-                    update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
-                    return action_code, "network"
                 action_code = torch.argmax(q_values).item()
                 update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
                 return action_code, "network"

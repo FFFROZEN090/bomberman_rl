@@ -13,7 +13,7 @@ EXPERIENCE_BUFFER_SIZE = 100000
 REPLAY_BUFFER_SIZE = 400
 
 MODEL_NAME = 'Li_DQN_agent'
-LAST_EPISODE = 5200
+LAST_EPISODE = 0
 INPUT_CHANNELS = 17
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
@@ -82,6 +82,7 @@ def setup(self):
     
     else:
         self.model.load(MODEL_PATH)
+        self.target_model.load(MODEL_PATH)
         self.model.eval()
         self.model.requires_grad_(False)
         self.logger.info('Model for evaluation loaded')

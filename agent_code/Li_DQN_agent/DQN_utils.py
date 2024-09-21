@@ -8,7 +8,7 @@ import numpy as np
 from collections import deque
 from random import shuffle
 
-SEARCH_DEPTH = 4
+SEARCH_DEPTH = 8
 
 """
 Converts the game state into a 17x17x14 numpy array representation.
@@ -69,8 +69,8 @@ def get_low_level_state(game_state, rotate=0):
                     if 0 <= nx < 17 and 0 <= ny < 17:  # Check boundaries
                         state[7, nx, ny] = max(state[7, nx, ny], countdown + 1)
 
-    # Add explosion map
-    state[8, :, :] = np.where(explosion_map >= 1, 1, 0)
+    # Add explosion map, assigned the explosion map with corresponding value
+    state[8, :, :] = explosion_map
 
     # Rotate the state if necessary
     state = rotate_state(state.copy(), rotate)
@@ -109,7 +109,7 @@ def get_high_level_state(state):
     high_level_state = np.zeros((6, 17, 17), dtype=np.int8)
 
     # Blocked areas (channel 0)
-    high_level_state[0, :, :] = np.any(state[[1, 2, 3, 4, 5], :, :] == 1, axis=0)  # Other players, brick walls, boxes
+    high_level_state[0, :, :] = np.any(state[[1, 2, 3, 4, 5, 8], :, :] >= 1, axis=0)  # Other players, brick walls, boxes
 
     # Safe areas (channel 1) : check the cell is empty and channel 7 is 0
     high_level_state[1, :, :] = np.where(state[9, :, :] == 1, 1, 0)  # Empty cells are safe
@@ -233,7 +233,7 @@ def safe_spots(state):
     blocked = (
         (state[4, :, :] == 1) |  # Brick walls
         (state[5, :, :] == 1) |  # Boxes
-        (state[8, :, :] == 1)    # Blast areas
+        (state[8, :, :] >= 1)    # Blast areas
     )
 
     # Initialize BFS queue with (position, arrival_time)

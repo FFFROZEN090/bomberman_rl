@@ -117,7 +117,7 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
         
     # If the agent dropped a bomb and crates will be destroyed, add an event to events list
     crates = old_game_state['field'] == 1
-    if self_action == 'BOMB':
+    if 'BOMB_DROPPED' in events:
         for (i, j) in [(new_game_state['self'][3][0] + h, new_game_state['self'][3][1]) for h in range(-3, 4)] + [(new_game_state['self'][3][0], new_game_state['self'][3][1] + h) for h in range(-3, 4)]:
             if (0 < i < crates.shape[0]) and (0 < j < crates.shape[1]) and crates[i, j] and bombs_time[i, j] == 5:
                 events.append(BOMB_DROPPED_FOR_CRATE)
