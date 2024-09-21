@@ -110,10 +110,13 @@ def get_high_level_state(state):
 
     # Blocked areas (channel 0)
     high_level_state[0, :, :] = np.any(state[[1, 2, 3, 4, 5, 8], :, :] >= 1, axis=0)  # Other players, brick walls, boxes
+    high_level_state[0, :, :] = np.where(state[7, :, :] == 1, 1, high_level_state[0, :, :])  # Bomb countdown areas are blocked
 
     # Safe areas (channel 1) : check the cell is empty and channel 7 is 0
     high_level_state[1, :, :] = np.where(state[9, :, :] == 1, 1, 0)  # Empty cells are safe
     high_level_state[1, :, :] = np.where(state[7, :, :] >= 1, 0, high_level_state[1, :, :])  # Bomb countdown cells are not safe
+    # Blast area is not safe
+    high_level_state[1, :, :] = np.where(state[8, :, :] >= 1, 0, high_level_state[1, :, :])  # Blast area cells are not safe
 
     # Destroyable blocks (channel 2)
     high_level_state[2, :, :] = np.any(state[[1, 2, 3, 5], :, :] == 1, axis=0)  # Players are destroyable
