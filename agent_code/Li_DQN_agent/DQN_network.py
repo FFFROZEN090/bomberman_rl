@@ -25,25 +25,29 @@ class DQN(nn.Module):
         super(DQN, self).__init__()
         # Sequential model
         self.model = nn.Sequential(
-            nn.Conv2d(input_channels, 256, kernel_size=5, stride=2), 
+            nn.Conv2d(input_channels, 128, kernel_size=5, stride=2), 
+            nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=3, stride=1),
             nn.ReLU(),
             nn.Conv2d(256, 512, kernel_size=3, stride=1),
             nn.ReLU(),
             nn.Conv2d(512, 1024, kernel_size=3, stride=1),
             nn.ReLU(),
+            nn.Conv2d(1024, 2048, kernel_size=1, stride=1),
+            nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(1024 * 3 * 3, 512),
+            nn.Linear(2048*1*1, 512),
             nn.ReLU(),
             nn.Linear(512, 256),
             nn.ReLU(),
-            nn.Linear(256, output_size),
+            nn.Linear(256, output_size)
         )
 
         # Exploration probability
         self.exploration_prob = 1.0
 
         # Decay rate
-        self.decay_rate = 0.995
+        self.decay_rate = 0.9995
 
         # Learning rate
         self.learning_rate = 0.001
@@ -139,6 +143,10 @@ class DQN(nn.Module):
         next_states = np.array([exp.global_next_state for exp in experiences])
         dones = np.array([exp.done for exp in experiences]).astype(bool)
 
+        # Normalize states and next_states
+        states = self.normalize_states(states)
+        next_states = self.normalize_states(next_states)
+
         # Convert numpy arrays to PyTorch tensors and move to the specified device
         states = torch.FloatTensor(states).to(device)
         actions = torch.LongTensor(actions).to(device)
@@ -147,6 +155,15 @@ class DQN(nn.Module):
         dones = torch.BoolTensor(dones).to(device)
 
         return states, actions, rewards, next_states, dones
+
+    def normalize_states(self, states):
+        # Implement normalization logic here
+        # Example using min-max scaling
+        min_val = states.min(axis=0)
+        max_val = states.max(axis=0)
+        states = (states - min_val) / (max_val - min_val + 1e-8)
+        return states
+
 
     def dqn_train(self, replay_buffer, experience_buffer, batch_size, target_model = None, device=DEVICE):
         self.epoch += 1
@@ -219,7 +236,7 @@ class DQN(nn.Module):
 
 
         # If after 100 epochs, save the model
-        if self.epoch % 200 == 0:
+        if self.epoch % 50 == 0:
             if not os.path.exists(os.path.join(os.path.dirname(__file__), 'checkpoints')):
                 os.mkdir(os.path.join(os.path.dirname(__file__), 'checkpoints'))
             self.save(os.path.join(os.path.dirname(__file__), 'checkpoints', 'Li_DQN_agent' + '_' + str(self.epoch) + '.' + 'pt'))
@@ -244,11 +261,15 @@ class DQN(nn.Module):
         self.load_state_dict(torch.load(path))
 
     def init_parameters(self):
-        for param in self.parameters():
-            if len(param.size()) == 2:  # Linear layer
-                torch.nn.init.xavier_uniform_(param)
-            elif len(param.size()) == 4:  # Convolution layer
-                torch.nn.init.kaiming_uniform_(param)
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.Conv2d):
+                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
 
 class ExperienceDataset:
     def __init__(self, max_size=1000000,load_from_npy=False, npy_file_path=None):

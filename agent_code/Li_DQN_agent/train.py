@@ -27,7 +27,10 @@ BOMB_TIME2 = 'BOMB_TIME2' # 2 steps to explode
 BOMB_TIME3 = 'BOMB_TIME3' # 3 steps to explode
 BOMB_TIME4 = 'BOMB_TIME4' # 4 steps to explode
 BOMB_DROPPED_FOR_CRATE = 'BOMB_DROPPED_FOR_CRATE' # Crates will be destroyed by the dropped bomb
-EXCAPE_FROM_BOMB = 'EXCAPE_FROM_BOMB'
+ESCAPE_FROM_BOMB = 'ESCAPE_FROM_BOMB'
+BOMB_FARTHER = 'BOMB_FARTHER'
+FALL_INTO_BOMB = 'FALL_INTO_BOMB'
+ESCAPE_FROM_BOMB_BY_CORNER = 'ESCAPE_FROM_BOMB_BY_CORNER'
 LOOP_DETECTED = 'LOOP_DETECTED'
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 UP_REPEAT = 'UP_REPEAT'
@@ -87,6 +90,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         self.replay_buffer.clear()
 
     self.surving_rounds += 1
+    self.last_events = events
 
 def calculate_events(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[dict]) -> List[dict]:
     # add position to visited history
@@ -112,8 +116,28 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
                 bombs_time[i, j] = min(bombs_time[i, j], t)
         
     # If the agent was in danger zone but now safe, add an event to events list
-    if bombs_time[old_game_state['self'][3]] < 5 and bombs_time[new_game_state['self'][3]] == 5:
-        events.append('EXCAPE_FROM_BOMB')
+        # If the agent is farther from the bomb, add an event to events list
+    if bombs_time[old_game_state['self'][3]] < 3:
+        if bombs_time[new_game_state['self'][3]] == 5:
+            # If the agent was in danger zone but now safe, add an event to events list
+            events.append(ESCAPE_FROM_BOMB)
+        for (xb, yb), t in bombs:
+            if xb == old_game_state['self'][3][0] and abs(yb - old_game_state['self'][3][1]) < 4:
+                # If the agent is farther from the bomb, add an event to events list
+                if abs(yb - old_game_state['self'][3][1]) < abs(yb - new_game_state['self'][3][1]):
+                    events.append(BOMB_FARTHER)
+                # If the agent escapes from the bomb by turning around a corner, add an event to events list
+                if xb != new_game_state['self'][3][0] and yb != new_game_state['self'][3][1]:
+                    events.append(ESCAPE_FROM_BOMB_BY_CORNER)
+            if yb == old_game_state['self'][3][1] and abs(xb - old_game_state['self'][3][0]) < 4:
+                if abs(xb - old_game_state['self'][3][0]) < abs(xb - new_game_state['self'][3][0]):
+                    events.append(BOMB_FARTHER)
+                if xb != new_game_state['self'][3][0] and yb != new_game_state['self'][3][1]:
+                    events.append(ESCAPE_FROM_BOMB_BY_CORNER)
+    
+        # If the agent falls into the bomb range from a safer zone, add an event to events list
+    if self_action != 'BOMB' and bombs_time[old_game_state['self'][3]] == 5 and bombs_time[new_game_state['self'][3]] < 2:
+        events.append(FALL_INTO_BOMB)
         
     # If the agent dropped a bomb and crates will be destroyed, add an event to events list
     crates = old_game_state['field'] == 1
@@ -121,6 +145,7 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
         for (i, j) in [(new_game_state['self'][3][0] + h, new_game_state['self'][3][1]) for h in range(-3, 4)] + [(new_game_state['self'][3][0], new_game_state['self'][3][1] + h) for h in range(-3, 4)]:
             if (0 < i < crates.shape[0]) and (0 < j < crates.shape[1]) and crates[i, j] and bombs_time[i, j] == 5:
                 events.append(BOMB_DROPPED_FOR_CRATE)
+    
 
     if len(self.action_buffer) == self.action_buffer_size:
         # UP Repeat 5 times in a 10 steps window
@@ -152,8 +177,16 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
     
     if not self.last_action_invalid and self.last_action is not None:
         if ACTIONS.index(self.last_action) < 4:
-            if (ACTIONS.index(self.last_action) + 1 ) % 4 == ACTIONS.index(self_action) or (ACTIONS.index(self.last_action) - 1 ) % 4 == ACTIONS.index(self_action) and 'INVALID_ACTION' not in events:
+            if ( (ACTIONS.index(self.last_action) + 1 ) % 4 == ACTIONS.index(self_action) or (ACTIONS.index(self.last_action) - 1 ) % 4 == ACTIONS.index(self_action)) and 'INVALID_ACTION' not in events:
                 events.append('TURN_AROUND')
+
+    if not self.last_action_invalid and self.last_action == "BOMB" and self.last_events is not None:
+        if ACTIONS.index(self_action) < 4 and 'INVALID_ACTION' not in events and "BOMB_DROPPED_FOR_CRATE" in self.last_events:
+            events.append('BOMB_AND_MOVE')
+
+    if self.last_action_invalid and self.last_action is not None:
+        if ACTIONS.index(self.last_action) < 4 and 'INVALID_ACTION' not in events and ((ACTIONS.index(self.last_action) + 2) % 4 == ACTIONS.index(self_action)):
+            events.append('OPPOSITE_ACTION')
 
     events.append(self_action)
 
@@ -195,6 +228,9 @@ def end_of_round(self, last_game_state, last_action, events):
     self.last_game_state = None
     self.last_state = None
     self.last_action = None
+    self.last_action_type = None
+    self.last_action_invalid = False
+    self.last_events = None
     self.rotate = 0
 
     score = last_game_state['self'][1]

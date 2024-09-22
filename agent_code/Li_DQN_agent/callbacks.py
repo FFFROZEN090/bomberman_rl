@@ -10,11 +10,11 @@ from collections import deque
 
 
 EXPERIENCE_BUFFER_SIZE = 100000
-REPLAY_BUFFER_SIZE = 400
+REPLAY_BUFFER_SIZE = 600
 
 MODEL_NAME = 'Li_DQN_agent'
 LAST_EPISODE = 0
-INPUT_CHANNELS = 17
+INPUT_CHANNELS = 7
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', MODEL_NAME + '_' + str(LAST_EPISODE) + '.pt')
@@ -33,6 +33,7 @@ def setup(self):
     self.last_action = None
     self.last_action_type = None
     self.last_reward = None
+    self.last_events = None
 
     # Store last game state
     self.last_game_state = None
@@ -106,8 +107,6 @@ def act(agent, game_state: dict):
     # Get Agent's position from current state, first dimension where 1 is present
     agent_position = np.where(current_state[0] == 1)
 
-    # Print agent position comparison
-    agent.logger.debug(f"Agent position: {agent_position}, Game state position: {game_state['self'][3]}")
     if game_state['step'] == 1:
         agent.logger.debug(f"New round started")
 

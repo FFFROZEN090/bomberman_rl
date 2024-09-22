@@ -62,13 +62,30 @@ def get_low_level_state(game_state, rotate=0):
     for bomb_pos, countdown in bombs:
         state[7, bomb_pos[0], bomb_pos[1]] = countdown + 1
         # Add bomb danger zones
-        for dx in range(-3, 4):
-            for dy in range(-3, 4):
-                if abs(dx) + abs(dy) <= 3:  # Manhattan distance <= 2
-                    nx, ny = x + dx, y + dy
-                    if 0 <= nx < 17 and 0 <= ny < 17:  # Check boundaries
-                        state[7, nx, ny] = max(state[7, nx, ny], countdown + 1)
-
+        for dx in range(0, -4, -1):
+            nx = bomb_pos[0] + dx
+            if state[4, nx, bomb_pos[1]] == 1:
+                break
+            if 1 <= nx < 16:
+                state[7, nx, bomb_pos[1]] = max(state[8, nx, bomb_pos[1]], countdown + 1)
+        for dx in range(0, 4):
+            nx = bomb_pos[0] + dx
+            if state[4, nx, bomb_pos[1]] == 1:
+                break
+            if 1 <= nx < 16:
+                state[7, nx, bomb_pos[1]] = max(state[8, nx, bomb_pos[1]], countdown + 1)
+        for dy in range(0, -4, -1):
+            ny = bomb_pos[1] + dy
+            if state[4, bomb_pos[0], ny] == 1:
+                break
+            if 1 <= ny < 16:
+                state[7, bomb_pos[0], ny] = max(state[8, bomb_pos[0], ny], countdown + 1)
+        for dy in range(0, 4):
+            ny = bomb_pos[1] + dy
+            if state[4, bomb_pos[0], ny] == 1:
+                break
+            if 1 <= ny < 16:
+                state[7, bomb_pos[0], ny] = max(state[8, bomb_pos[0], ny], countdown + 1)
     # Add explosion map, assigned the explosion map with corresponding value
     state[8, :, :] = explosion_map
 
@@ -109,17 +126,19 @@ def get_high_level_state(state):
     high_level_state = np.zeros((6, 17, 17), dtype=np.int8)
 
     # Blocked areas (channel 0)
-    high_level_state[0, :, :] = np.any(state[[1, 2, 3, 4, 5, 8], :, :] >= 1, axis=0)  # Other players, brick walls, boxes
+    high_level_state[0, :, :] = np.any(state[[4, 5, 8], :, :] >= 1, axis=0)  # Other players, brick walls, boxes
     high_level_state[0, :, :] = np.where(state[7, :, :] == 1, 1, high_level_state[0, :, :])  # Bomb countdown areas are blocked
 
     # Safe areas (channel 1) : check the cell is empty and channel 7 is 0
     high_level_state[1, :, :] = np.where(state[9, :, :] == 1, 1, 0)  # Empty cells are safe
-    high_level_state[1, :, :] = np.where(state[7, :, :] >= 1, 0, high_level_state[1, :, :])  # Bomb countdown cells are not safe
+    high_level_state[1, :, :] = np.where(state[7, :, :] == 2, 0, high_level_state[1, :, :])  # Bomb countdown cells are not safe
+    high_level_state[1, :, :] = np.where(state[7, :, :] == 1, 0, high_level_state[1, :, :])
+
     # Blast area is not safe
-    high_level_state[1, :, :] = np.where(state[8, :, :] >= 1, 0, high_level_state[1, :, :])  # Blast area cells are not safe
+    high_level_state[1, :, :] = np.where(state[8, :, :] >= 1, 3, high_level_state[1, :, :])  # Blast area cells are not safe
 
     # Destroyable blocks (channel 2)
-    high_level_state[2, :, :] = np.any(state[[1, 2, 3, 5], :, :] == 1, axis=0)  # Players are destroyable
+    high_level_state[2, :, :] = np.any(state[[1,2,3,5], :, :] == 1, axis=0)  # Players are destroyable
 
     # Coin Target areas (channel 3)
     high_level_state[3, :, :] = coin_target(state)
@@ -127,10 +146,46 @@ def get_high_level_state(state):
     # Safe spots areas (channel 4)
     high_level_state[4, :, :] = safe_spots(state)
 
-    # Distance to safe area (channel 5)
-    high_level_state[5, :, :] = distance_to_empty_cells(state)
+    # Bomb spot: Near the crate, suitable for bomb, calculate nearby crate, the value is the number of crates
+    high_level_state[5, :, :] = bomb_spot(state)
 
     return high_level_state
+
+def bomb_spot(state):
+    # Find agent's position (player 0)
+    player_pos = np.where(state[0, :, :] == 1)
+    agent_x, agent_y = player_pos[0][0], player_pos[1][0]
+
+    # Define 7x7 grid boundaries around the agent
+    x_min = max(1, agent_x - SEARCH_DEPTH)
+    x_max = min(15, agent_x + SEARCH_DEPTH)
+    y_min = max(1, agent_y - SEARCH_DEPTH)
+    y_max = min(15, agent_y + SEARCH_DEPTH)
+
+    # Define blocked positions
+    # Positions are blocked if they are:
+    # - Brick walls (state[4] == 1)
+    # - Boxes (state[5] == 1)
+    blocked = (
+        (state[4, :, :] == 1) |  # Brick walls
+        (state[5, :, :] == 1)    # Boxes
+    )
+
+    # Initialize bomb spot matrix with zeros
+    bomb_spot = np.zeros((17, 17), dtype=np.int8)
+
+    # Count the number of crates in the 7x7 grid
+    for x in range(x_min, x_max + 1):
+        for y in range(y_min, y_max + 1):
+            if not blocked[x, y]:
+                for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+                    neighbor_x = x + dx
+                    neighbor_y = y + dy
+                    if x_min <= neighbor_x <= x_max and y_min <= neighbor_y <= y_max:
+                        if state[5, neighbor_x, neighbor_y] == 1:
+                            bomb_spot[x, y] += 1
+
+    return bomb_spot
 
 def distance_to_empty_cells(state):
     import numpy as np
@@ -141,10 +196,10 @@ def distance_to_empty_cells(state):
     agent_x, agent_y = player_pos[0][0], player_pos[1][0]
 
     # Define 7x7 grid boundaries around the agent
-    x_min = max(0, agent_x - SEARCH_DEPTH)
-    x_max = min(16, agent_x + SEARCH_DEPTH)
-    y_min = max(0, agent_y - SEARCH_DEPTH)
-    y_max = min(16, agent_y + SEARCH_DEPTH)
+    x_min = max(1, agent_x - SEARCH_DEPTH)
+    x_max = min(15, agent_x + SEARCH_DEPTH)
+    y_min = max(1, agent_y - SEARCH_DEPTH)
+    y_max = min(15, agent_y + SEARCH_DEPTH)
 
     # Define empty cells within the 7x7 grid
     # Empty cells are positions where there is:
@@ -176,10 +231,8 @@ def distance_to_empty_cells(state):
     # Note: Bomb countdown areas are not blocked
     blocked = (
         (state[4, :, :] == 1) |  # Brick walls
-        (state[5, :, :] == 1) |  # Boxes
-        (state[1, :, :] == 1) |  # Other player 1
-        (state[2, :, :] == 1) |  # Other player 2
-        (state[3, :, :] == 1)    # Other player 3
+        (state[5, :, :] == 1)
+
     )
 
     # Initialize BFS queue
@@ -213,72 +266,53 @@ Around 7x7 area of our player, find the safe spots.
 The safe spots are the empty cells without any danger (bomb countdown, explosion, other players, brick walls, boxes).
 The distance to the safe spots is calculated using Dijkstra's algorithm.
 """
+
 def safe_spots(state):
+
     # Find agent's position (player 0)
     player_pos = np.where(state[0, :, :] == 1)
     agent_x, agent_y = player_pos[0][0], player_pos[1][0]
 
-    # Define 7x7 grid boundaries around the agent
-    x_min = max(0, agent_x - SEARCH_DEPTH)
-    x_max = min(16, agent_x + SEARCH_DEPTH)
-    y_min = max(0, agent_y - SEARCH_DEPTH)
-    y_max = min(16, agent_y + SEARCH_DEPTH)
+    # Define grid boundaries around the agent
+    x_min = max(1, agent_x - SEARCH_DEPTH)
+    x_max = min(15, agent_x + SEARCH_DEPTH)
+    y_min = max(1, agent_y - SEARCH_DEPTH)
+    y_max = min(15, agent_y + SEARCH_DEPTH)
 
-    # Initialize distance matrix with infinity
-    distance = np.full((17, 17), np.inf)
-    distance[agent_x, agent_y] = 0
+    # Initialize distance matrix with -1 (unreachable)
+    distance_int = np.full((17, 17), -1, dtype=np.int8)
 
-    # Define blocked positions
-    # Positions are blocked if they are:
-    # - Brick walls (state[4] == 1)
-    # - Boxes (state[5] == 1)
-    # - Blast areas (state[8] == 1)
-    blocked = (
-        (state[4, :, :] == 1) |  # Brick walls
-        (state[5, :, :] == 1) |  # Boxes
-        (state[8, :, :] >= 1)    # Blast areas
+    # Define blocked cells (brick walls and boxes)
+    blocked = (state[4, :, :] == 1) | (state[5, :, :] == 1)
+    distance_int[blocked] = -2  # Blocked cells
+
+    # Define unsafe cells according to your safe area definition
+    unsafe = (
+        (state[9, :, :] != 1) |  # Not empty cells are unsafe
+        (state[7, :, :] == 1) |  # Bomb countdown cells are unsafe
+        (state[7, :, :] == 2) |
+        (state[8, :, :] >= 1)    # Blast area cells are unsafe
     )
+    unsafe &= ~blocked  # Exclude already blocked cells
+    distance_int[unsafe] = -3  # Unsafe cells
 
-    # Initialize BFS queue with (position, arrival_time)
+    # Initialize BFS queue and set agent's position
+    distance_int[agent_x, agent_y] = 0
     queue = deque()
-    queue.append((agent_x, agent_y, 0))
-
-    # Keep track of visited positions
-    visited = np.zeros((17, 17), dtype=bool)
-    visited[agent_x, agent_y] = True
+    queue.append((agent_x, agent_y))
 
     # Perform BFS to compute distances to safe spots
     while queue:
-        current_x, current_y, arrival_time = queue.popleft()
+        current_x, current_y = queue.popleft()
         for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
             neighbor_x = current_x + dx
             neighbor_y = current_y + dy
             if x_min <= neighbor_x <= x_max and y_min <= neighbor_y <= y_max:
-                if not blocked[neighbor_x, neighbor_y]:
-                    if not visited[neighbor_x, neighbor_y]:
-                        # Check bomb danger area
-                        bomb_countdown = state[7, neighbor_x, neighbor_y]
-                        if bomb_countdown > 0:
-                            # Bomb will explode in (bomb_countdown - 1) steps
-                            bomb_explosion_time = bomb_countdown - 1
-                            expected_arrival_time = arrival_time + 1
-                            if expected_arrival_time >= bomb_explosion_time:
-                                # Cannot proceed to this cell
-                                continue
-                        # Safe to proceed
-                        distance[neighbor_x, neighbor_y] = arrival_time + 1
-                        visited[neighbor_x, neighbor_y] = True
-                        queue.append((neighbor_x, neighbor_y, arrival_time + 1))
-
-    # Identify safe spots within the 7x7 grid
-    safe_spots_mask = (~blocked) & (np.isfinite(distance))
-
-    # Convert distances to integers
-    distance_int = np.zeros((17, 17), dtype=np.int8)
-    for x in range(x_min, x_max + 1):
-        for y in range(y_min, y_max + 1):
-            if safe_spots_mask[x, y]:
-                distance_int[x, y] = int(distance[x, y])
+                # Only proceed if cell is unvisited, not blocked, and not unsafe
+                if distance_int[neighbor_x, neighbor_y] == -1:
+                    if not blocked[neighbor_x, neighbor_y] and not unsafe[neighbor_x, neighbor_y]:
+                        distance_int[neighbor_x, neighbor_y] = distance_int[current_x, current_y] + 1
+                        queue.append((neighbor_x, neighbor_y))
 
     return distance_int
 
@@ -288,34 +322,40 @@ If there is a coin in the 7x7 block, find the distance to the coin from the agen
 The distance matrix record the distance to closest coin from agent position. Each cell value is the distance to the coin.
 """
 def coin_target(state):
+    # Define SEARCH_DEPTH
+    SEARCH_DEPTH = 3  # Since the grid is 7x7, half of 7 minus 1
+
     # Find agent's position (player 0)
     player_pos = np.where(state[0, :, :] == 1)
     agent_x, agent_y = player_pos[0][0], player_pos[1][0]
-    
+
     # Find coin positions
     coin_pos = np.where(state[6, :, :] == 1)
-    
-    # If there is no coin, return a zero matrix
-    if coin_pos[0].size == 0 or coin_pos[1].size == 0:
-        return np.zeros((17, 17), dtype=np.int8)
-    
-    # Define 7x7 grid boundaries around the agent
-    x_min = max(0, agent_x - SEARCH_DEPTH)
-    x_max = min(16, agent_x + SEARCH_DEPTH)
-    y_min = max(0, agent_y - SEARCH_DEPTH)
-    y_max = min(16, agent_y + SEARCH_DEPTH)
-    
-    # Initialize distance matrix with infinity
-    distance = np.full((17, 17), np.inf)
-    distance[agent_x, agent_y] = 0
-    
+
+    # If there is no coin, return a matrix indicating unreachable (-1)
+    if coin_pos[0].size == 0:
+        return np.full((17, 17), -1, dtype=np.int8)
+
+    # Define grid boundaries around the agent
+    x_min = max(1, agent_x - SEARCH_DEPTH)
+    x_max = min(15, agent_x + SEARCH_DEPTH)
+    y_min = max(1, agent_y - SEARCH_DEPTH)
+    y_max = min(15, agent_y + SEARCH_DEPTH)
+
+    # Initialize distance matrix with -1 (unreachable)
+    distance_int = np.full((17, 17), -1, dtype=np.int8)
+
     # Define blocked positions (bricks and boxes)
     blocked = (state[4, :, :] == 1) | (state[5, :, :] == 1)
-    
-    # Initialize BFS queue
+
+    # Set blocked cells to -2 in distance_int
+    distance_int[blocked] = -2
+
+    # Initialize BFS queue and set agent's position
+    distance_int[agent_x, agent_y] = 0
     queue = deque()
     queue.append((agent_x, agent_y))
-    
+
     # Perform BFS to compute distances
     while queue:
         current_x, current_y = queue.popleft()
@@ -323,42 +363,25 @@ def coin_target(state):
             neighbor_x = current_x + dx
             neighbor_y = current_y + dy
             if x_min <= neighbor_x <= x_max and y_min <= neighbor_y <= y_max:
-                if not blocked[neighbor_x, neighbor_y]:
-                    if distance[neighbor_x, neighbor_y] > distance[current_x, current_y] + 1:
-                        distance[neighbor_x, neighbor_y] = distance[current_x, current_y] + 1
+                if distance_int[neighbor_x, neighbor_y] == -1:  # Not visited and not blocked
+                    if not blocked[neighbor_x, neighbor_y]:
+                        distance_int[neighbor_x, neighbor_y] = distance_int[current_x, current_y] + 1
                         queue.append((neighbor_x, neighbor_y))
-    
-    # Find coins within the 7x7 grid
-    coins_in_grid = [
-        (x, y) for x, y in zip(coin_pos[0], coin_pos[1])
-        if x_min <= x <= x_max and y_min <= y <= y_max
-    ]
-    
-    # If no coins are reachable within the grid, return zeros
-    if not coins_in_grid:
-        return np.zeros((17, 17), dtype=np.int8)
-    
-    # Convert distances to integers and fill the distance matrix
-    distance_int = np.zeros((17, 17), dtype=np.int8)
-    for x in range(x_min, x_max + 1):
-        for y in range(y_min, y_max + 1):
-            if np.isfinite(distance[x, y]):
-                distance_int[x, y] = int(distance[x, y])
-    
-    return distance_int 
+
+    return distance_int
 
 def get_state(game_state, rotate, bomb_valid=False):
     # Initialize the state
-    state = np.zeros((17, 17, 17), dtype=np.int8)
+    state = np.zeros((18, 17, 17), dtype=np.int8)
     low_level_state = get_low_level_state(game_state, rotate)
     high_level_state = get_high_level_state(low_level_state)
+    # 
 
-    # Concatenate the low level state and high level state
-    state[:10, :, :] = low_level_state
-    state[10:16, :, :] = high_level_state
-    # All value in 16th channel is the bomb cooldown
-    state[16, :, :] = bomb_valid
-    return state
+    # Append bomb valid to high level state
+    bomb_valid = np.zeros((17, 17), dtype=np.int8)
+    bomb_valid[:, :] = bomb_valid
+    high_level_state = np.append(high_level_state, bomb_valid[np.newaxis, :, :], axis=0)
+    return high_level_state
 
 def rule_based_action(agent, game_state):
     """

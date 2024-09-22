@@ -19,7 +19,7 @@ SCENARIOS = {
     },
     "loot-crate": { 
         "CRATE_DENSITY": 0.1, 
-        "COIN_COUNT": 20 
+        "COIN_COUNT": 20
     }, 
     # this is the tournament game mode
     "classic": {
