@@ -1,16 +1,16 @@
 # Hyperparameters
 import os
 
-MODEL_NAME = 'classic_safe_bomb_reward' # Model name
-LOAD_MODEL_NAME = 'classic_safe_bomb_reward' # Model name to load
+MODEL_NAME = 'I-I' # Model name
+LOAD_MODEL_NAME = 'I-I' # Model name to load
 MODEL_TYPE = 'FF' # 'FF' or 'SFF' or 'LSTM' or 'PPO'
 SEQ_LEN = 1 # Sequence length for LSTM
 N_LAYERS = 2 # Number of layers for FF or LSTM
-HIDDEN_DIM = 256 # Hidden dimension for FF or LSTM
-LAST_EPISODE = 160000 # Last episode number
+HIDDEN_DIM = 128 # Hidden dimension for FF or LSTM
+LAST_EPISODE = 20000 # Last episode number
 ALPHA = 0 # Weight for imitation learning loss
 
-FEATURE_DIM = 34
+FEATURE_DIM = 30
 
 # Path
 
@@ -23,6 +23,6 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', LOAD_MODEL_N
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 
-TEST_MODE = False # Whether to test the model
+TEST_MODE = True # Whether to test the model
 
 EXAMINE_PATH = '' # Best model

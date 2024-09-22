@@ -29,7 +29,7 @@ class BasePolicy(nn.Module):
         self.rewards = []
         self.state_seqs = []
         self.hidden = None
-        self.birth_corner = None # 0: left top, 1: right top, 2: left bottom, 3: right bottom
+        self.corner = None # 0: left top, 1: right top, 2: left bottom, 3: right bottom
         self.bomb_dropped = 0
         
         # parameters for saving and loading the model
@@ -152,7 +152,7 @@ class BasePolicy(nn.Module):
         self.action_history.clear()
         self.rewards.clear()
         self.action_probs.clear()
-        self.birth_corner = None
+        self.corner = None
         self.bomb_dropped = 0
     
     def train(self):
@@ -201,19 +201,18 @@ class BasePolicy(nn.Module):
         # Features 1.1. determine which corner the agent is in: left top, right top, left bottom, right bottom
         
         # make use of the corner information 
-        if game_state['step'] == 1:
-            if self_pos == (1,1): # left top
-                self.birth_corner = 0
-            elif self_pos == (1,s.ROWS-2): # left bottom?
-                self.birth_corner = 1
-            elif self_pos == (s.COLS-2,1): # right top?
-                self.birth_corner = 2
-            elif self_pos == (s.COLS-2,s.ROWS-2): # right bottom
-                self.birth_corner = 3
-            else:
-                raise ValueError("The birth corner is not determined at step 0.")
+        if self_pos[0] <= s.COLS//2 and self_pos[1] <= s.ROWS//2: # left top
+            self.corner = 0
+        elif self_pos[0] <= s.COLS//2 and self_pos[1] > s.ROWS//2: # left bottom
+            self.corner = 1
+        elif self_pos[0] > s.COLS//2 and self_pos[1] <= s.ROWS//2: # right top
+            self.corner = 2
+        elif self_pos[0] > s.COLS//2 and self_pos[1] > s.ROWS//2: # right bottom
+            self.corner = 3
+        else:
+            raise ValueError("The birth corner is not determined at step 0.")
         # else:
-            # print("The birth corner is: ", self.birth_corner, 'at step ', game_state['step'])
+            # print("The birth corner is: ", self.corner, 'at step ', game_state['step'])
         
         # Features 1.2. determine the direction feasibility
         candidate_position = [(self_pos[0], self_pos[1]-1), (self_pos[0], self_pos[1]+1), 
@@ -245,21 +244,21 @@ class BasePolicy(nn.Module):
         left_coins_score = 0
         right_coins_score = 0
         for (xc, yc) in coins:
-            if yc > self_pos[1]:
+            if up_feasible and yc > self_pos[1]:
                 up_coins_score += 1/(yc-self_pos[1])
-            elif yc < self_pos[1]:
+            elif down_feasible and yc < self_pos[1]:
                 down_coins_score += 1/(self_pos[1]-yc)
-            if xc > self_pos[0]:
+            if right_feasible and xc > self_pos[0] :
                 right_coins_score += 1/(xc-self_pos[0])
-            elif xc < self_pos[0]:
+            elif left_feasible and xc < self_pos[0]:
                 left_coins_score += 1/(self_pos[0]-xc)
                 
-        up_coin_distance = 0
-        down_coin_distance = 0
-        left_coin_distance = 0
-        right_coin_distance = 0
-        for (xc, yc) in coins:
-            up_coin_distance 
+        # up_coin_distance = 0
+        # down_coin_distance = 0
+        # left_coin_distance = 0
+        # right_coin_distance = 0
+        # for (xc, yc) in coins:
+        #     up_coin_distance 
             
         
         # Features 2.2. determine the distance to the crates
@@ -270,13 +269,13 @@ class BasePolicy(nn.Module):
         right_crates_score = 0
         # TODO: How to encode the crates information?
         for (xc, yc) in crates_list:
-            if yc > self_pos[1] and up_crates_score < 1/(yc-self_pos[1]):
+            if up_feasible and yc > self_pos[1] and up_crates_score < 1/(yc-self_pos[1]):
                 up_crates_score = 1/(yc-self_pos[1])
-            elif yc < self_pos[1] and down_crates_score < 1/(self_pos[1]-yc):
+            elif down_feasible and yc < self_pos[1] and down_crates_score < 1/(self_pos[1]-yc):
                 down_crates_score = 1/(self_pos[1]-yc)
-            if xc > self_pos[0] and right_crates_score < 1/(xc-self_pos[0]):
+            if right_feasible and xc > self_pos[0] and right_crates_score < 1/(xc-self_pos[0]):
                 right_crates_score = 1/(xc-self_pos[0])
-            elif xc < self_pos[0] and left_crates_score < 1/(self_pos[0]-xc):
+            elif left_feasible and xc < self_pos[0] and left_crates_score < 1/(self_pos[0]-xc):
                 left_crates_score = 1/(self_pos[0]-xc)
         
         # Features 2.3. determine the distance to the deadend
@@ -287,13 +286,13 @@ class BasePolicy(nn.Module):
         left_dead_ends_score = 0
         right_dead_ends_score = 0
         for (xd, yd) in dead_ends:
-            if yd > self_pos[1] and up_dead_ends_score < 1/(yd-self_pos[1]):
+            if up_feasible and yd > self_pos[1] and up_dead_ends_score < 1/(yd-self_pos[1]):
                 up_dead_ends_score = 1/(yd-self_pos[1])
-            elif yd < self_pos[1] and down_dead_ends_score < 1/(self_pos[1]-yd):
+            elif down_feasible and yd < self_pos[1] and down_dead_ends_score < 1/(self_pos[1]-yd):
                 down_dead_ends_score = 1/(self_pos[1]-yd)
-            if xd > self_pos[0] and right_dead_ends_score < 1/(xd-self_pos[0]):
+            if right_feasible and xd > self_pos[0] and right_dead_ends_score < 1/(xd-self_pos[0]):
                 right_dead_ends_score = 1/(xd-self_pos[0])
-            elif xd < self_pos[0] and left_dead_ends_score < 1/(self_pos[0]-xd):
+            elif left_feasible and xd < self_pos[0] and left_dead_ends_score < 1/(self_pos[0]-xd):
                 left_dead_ends_score = 1/(self_pos[0]-xd)
                 
         # Feature 2.4.determine the distance to the others
@@ -302,29 +301,32 @@ class BasePolicy(nn.Module):
         left_opponents_score = 0
         right_opponents_score = 0
         for (xo, yo) in others:
-            if yo > self_pos[1]:
+            if up_feasible and yo > self_pos[1]:
                 up_opponents_score += 1/(yo-self_pos[1])
-            elif yo < self_pos[1]:
+            elif down_feasible and yo < self_pos[1]:
                 down_opponents_score += 1/(self_pos[1]-yo)
-            if xo > self_pos[0]:
+            if right_feasible and xo > self_pos[0]:
                 right_opponents_score += 1/(xo-self_pos[0])
-            elif xo < self_pos[0]:
+            elif left_feasible and xo < self_pos[0]:
                 left_opponents_score += 1/(self_pos[0]-xo)
         
         # 3. Life-saving features: bomb nearby, explosion nearby
         # Features 3.1. determine the distance to the bomb
-        up_bomb1_distance = 5
+        up_bomb1_distance = 5 # value is larger means this direction is safer
         down_bomb1_distance = 5
-        left_bomb1_distance = 5
         right_bomb1_distance = 5
-        up_bomb1_time = 5
+        left_bomb1_distance = 5
+        
+        up_bomb1_time = 5 # value is larger means this direction is safer
         down_bomb1_time = 5
-        left_bomb1_time = 5
         right_bomb1_time = 5
-        up_bomb1_safe = 1
+        left_bomb1_time = 5
+        
+        up_bomb1_safe = 1 # value is 1 means this direction is safe
         down_bomb1_safe = 1
-        left_bomb1_safe = 1
         right_bomb1_safe = 1
+        left_bomb1_safe = 1
+        
         for (xb, yb), t in bombs:
             if abs(yb-self_pos[1]) + abs(xb-self_pos[0]) < 5:
                 # if the bomb is around a wall, then the agent could hide behind
@@ -336,71 +338,68 @@ class BasePolicy(nn.Module):
                 # determine the safety information
                 # the bomb is on the right side of the wall and the agent is on the left side of the wall 
                 if arena[xb-1, yb] == -1 and self_pos[0] < xb: 
-                    up_bomb1_safe = 1
-                    down_bomb1_safe = 1
+                    up_bomb1_safe = 1 if up_feasible else 0
+                    down_bomb1_safe = 1 if down_feasible else 0
                 if arena[xb+1, yb] == -1 and self_pos[0] > xb:
-                    up_bomb1_safe = 1
-                    down_bomb1_safe = 1
+                    up_bomb1_safe = 1 if up_feasible else 0
+                    down_bomb1_safe = 1 if down_feasible else 0
                 if arena[xb, yb-1] == -1 and self_pos[1] < yb:
-                    left_bomb1_safe = 1
-                    right_bomb1_safe = 1
+                    left_bomb1_safe = 1 if left_feasible else 0
+                    right_bomb1_safe = 1 if right_feasible else 0
                 if arena[xb, yb+1] == -1 and self_pos[1] > yb:
-                    left_bomb1_safe = 1
-                    right_bomb1_safe = 1          
+                    left_bomb1_safe = 1 if left_feasible else 0
+                    right_bomb1_safe = 1 if right_feasible else 0
                 
-                up_bomb1_distance = min(up_bomb1_distance, abs(yb-self_pos[1])) if yb < self_pos[1] else up_bomb1_distance
-                down_bomb1_distance = min(down_bomb1_distance, abs(yb-self_pos[1])) if yb > self_pos[1] else down_bomb1_distance
-                left_bomb1_distance = min(left_bomb1_distance, abs(xb-self_pos[0])) if xb < self_pos[0] else left_bomb1_distance
-                right_bomb1_distance = min(right_bomb1_distance, abs(xb-self_pos[0])) if xb > self_pos[0] else right_bomb1_distance
-                up_bomb1_time = min(up_bomb1_time, t) if yb < self_pos[1] else up_bomb1_time
-                down_bomb1_time = min(down_bomb1_time, t) if yb > self_pos[1] else down_bomb1_time
-                left_bomb1_time = min(left_bomb1_time, t) if xb < self_pos[0] else left_bomb1_time
-                right_bomb1_time = min(right_bomb1_time, t) if xb > self_pos[0] else right_bomb1_time
+                up_bomb1_distance = min(up_bomb1_distance, abs(yb-self_pos[1])) if yb < self_pos[1] and up_bomb1_safe==0 else up_bomb1_distance
+                down_bomb1_distance = min(down_bomb1_distance, abs(yb-self_pos[1])) if yb > self_pos[1] and down_bomb1_safe==0 else down_bomb1_distance
+                right_bomb1_distance = min(right_bomb1_distance, abs(xb-self_pos[0])) if xb > self_pos[0] and right_bomb1_safe==0 else right_bomb1_distance
+                left_bomb1_distance = min(left_bomb1_distance, abs(xb-self_pos[0])) if xb < self_pos[0] and left_bomb1_safe==0 else left_bomb1_distance
                 
-                        
+                up_bomb1_time = min(up_bomb1_time, t) if yb < self_pos[1] and up_bomb1_safe==0 else up_bomb1_time
+                down_bomb1_time = min(down_bomb1_time, t) if yb > self_pos[1] and down_bomb1_safe==0 else down_bomb1_time
+                right_bomb1_time = min(right_bomb1_time, t) if xb > self_pos[0] and right_bomb1_safe==0 else right_bomb1_time
+                left_bomb1_time = min(left_bomb1_time, t) if xb < self_pos[0] and left_bomb1_safe==0 else left_bomb1_time             
         
         # merge all features
-        if self.birth_corner == 0: # left top
+        if self.corner == 0: # left top
             features = np.array([up_feasible, right_feasible, down_feasible, left_feasible, wait_feasible, bomb_left,
                                 up_coins_score, right_coins_score, down_coins_score, left_coins_score, 
                                 up_crates_score, right_crates_score, down_crates_score, left_crates_score, 
                                 up_dead_ends_score, right_dead_ends_score, down_dead_ends_score, left_dead_ends_score,
                                 up_opponents_score, right_opponents_score, down_opponents_score, left_opponents_score,
                                 up_bomb1_distance, right_bomb1_distance, down_bomb1_distance, left_bomb1_distance,
-                                up_bomb1_time, right_bomb1_time, down_bomb1_time, left_bomb1_time,
-                                up_bomb1_safe, right_bomb1_safe, down_bomb1_safe, left_bomb1_safe])
-        elif self.birth_corner == 1: # left bottom
+                                up_bomb1_time, right_bomb1_time, down_bomb1_time, left_bomb1_time
+                                ])
+        elif self.corner == 1: # left bottom
             features = np.array([down_feasible, right_feasible, up_feasible, left_feasible, wait_feasible, bomb_left,
                                 down_coins_score, right_coins_score, up_coins_score, left_coins_score,
                                 down_crates_score, right_crates_score, up_crates_score, left_crates_score,
                                 down_dead_ends_score, right_dead_ends_score, up_dead_ends_score, left_dead_ends_score,
                                 down_opponents_score, right_opponents_score, up_opponents_score, left_opponents_score,
                                 down_bomb1_distance, right_bomb1_distance, up_bomb1_distance, left_bomb1_distance,
-                                down_bomb1_time, right_bomb1_time, up_bomb1_time, left_bomb1_time,
-                                down_bomb1_safe, right_bomb1_safe, up_bomb1_safe, left_bomb1_safe])
-        elif self.birth_corner == 2: # right top
+                                down_bomb1_time, right_bomb1_time, up_bomb1_time, left_bomb1_time
+                                ])
+        elif self.corner == 2: # right top
             features = np.array([up_feasible, left_feasible, down_feasible, right_feasible, wait_feasible, bomb_left,
                                 up_coins_score, left_coins_score, down_coins_score, right_coins_score,
                                 up_crates_score, left_crates_score, down_crates_score, right_crates_score, 
                                 up_dead_ends_score, left_dead_ends_score, down_dead_ends_score, right_dead_ends_score,
                                 up_opponents_score, left_opponents_score, down_opponents_score, right_opponents_score, 
                                 up_bomb1_distance, left_bomb1_distance, down_bomb1_distance, right_bomb1_distance,
-                                up_bomb1_time, left_bomb1_time, down_bomb1_time, right_bomb1_time,
-                                up_bomb1_safe, left_bomb1_safe, down_bomb1_safe, right_bomb1_safe])
-        elif self.birth_corner == 3: # right bottom
+                                up_bomb1_time, left_bomb1_time, down_bomb1_time, right_bomb1_time])
+        elif self.corner == 3: # right bottom
             features = np.array([down_feasible, left_feasible, up_feasible, right_feasible, wait_feasible, bomb_left,
                                  down_coins_score, left_coins_score, up_coins_score, right_coins_score,
                                  down_crates_score, left_crates_score, up_crates_score, right_crates_score,
                                  down_dead_ends_score, left_dead_ends_score, up_dead_ends_score, right_dead_ends_score,
                                  down_opponents_score, left_opponents_score, up_opponents_score, right_opponents_score,
                                  down_bomb1_distance, left_bomb1_distance, up_bomb1_distance, right_bomb1_distance,
-                                 down_bomb1_time, left_bomb1_time, up_bomb1_time, right_bomb1_time,
-                                 down_bomb1_safe, left_bomb1_safe, up_bomb1_safe, right_bomb1_safe])
+                                 down_bomb1_time, left_bomb1_time, up_bomb1_time, right_bomb1_time])
         else:
             raise ValueError("The birth corner is not determined.")
         
         features = torch.tensor(features, dtype=torch.float32)
-        # print("features: ", features, "birth_corner: ", self.birth_corner)
+        # print("features: ", features, "corner: ", self.corner)
         return features
     
     def getting_action_probs(self, x):
@@ -410,13 +409,13 @@ class BasePolicy(nn.Module):
             result[j] = x[i]
             return result
         # according to the forward output and self corner information, determine the action probabilities
-        if self.birth_corner == 1: # left bottom
+        if self.corner == 1: # left bottom
             # swap the first and the third element of the output
             x = swap(x, 0, 2)
-        elif self.birth_corner == 2: # right top
+        elif self.corner == 2: # right top
             # swap the second and the fourth element of the output
             x = swap(x, 1, 3)
-        elif self.birth_corner == 3: # right bottom
+        elif self.corner == 3: # right bottom
             # swap the output elements
             x = swap(x, 0, 2)
             x = swap(x, 1, 3)

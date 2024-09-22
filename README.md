@@ -36,8 +36,13 @@ Setup for a project/competition amongst students to train a winning Reinforcemen
 ## Test
 
 Test code for task 1-4 in Main.py, if you want to show, just delete "--no-gui" in the corresponding command line:
-- Task 1: `python main.py play --agents Yu_policy_agent --train 1 --scenario coin-heaven --n-round 10000 --no-gui`
-- Task 2: `python main.py play --agents Yu_policy_agent --train 1 --scenario loot-crate --n-round 10000 --no-gui`
-- Task 3: `python main.py play --agents Yu_policy_agent --train 1 --scenario classic --n-round 10000 --no-gui`
-- Task 4: `python main.py play --no-gui --my-agent Yu_policy_agent --train 1--scenario classic --n-round 10000 --no-gui`
+- Task I-I: `python main.py play --agents Yu_policy_agent peaceful_agent peaceful_agent peaceful_agent --train 1 --scenario coin-heaven --n-round 20000 --no-gui`
+- Task I-II: `python main.py play --agents Yu_policy_agent rule_based_agent peaceful_agent peaceful_agent --train 1 --scenario coin-heaven --n-round 20000 --no-gui`
+- Task I-III: `python main.py play --agents Yu_policy_agent rule_based_agent rule_based_agent rule_based_agent --train 1 --scenario coin-heaven --n-round 20000 --no-gui`
+- Task II-I: `python main.py play --agents Yu_policy_agent peaceful_agent peaceful_agent peaceful_agent --train 1 --scenario loot-crate --n-round 20000 --no-gui`
+- Task II-II: `python main.py play --agents Yu_policy_agent rule_based_agent peaceful_agent peaceful_agent --train 1 --scenario loot-crate --n-round 20000 --no-gui`
+- Task II-III: `python main.py play --agents Yu_policy_agent rule_based_agent rule_based_agent rule_based_agent --train 1 --scenario loot-crate --n-round 20000 --no-gui`
+- Task III-I: `python main.py play --agents Yu_policy_agent peaceful_agent peaceful_agent peaceful_agent --train 1 --scenario classic --n-round 20000 --no-gui`
+- Task III-II: `python main.py play --agents Yu_policy_agent rule_based_agent peaceful_agent peaceful_agent --train 1 --scenario classic --n-round 20000 --no-gui`
+- Task III-III: `python main.py play --no-gui --my-agent Yu_policy_agent --train 1--scenario classic --n-round 20000 --no-gui`
 

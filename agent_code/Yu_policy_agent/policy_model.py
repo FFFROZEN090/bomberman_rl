@@ -46,7 +46,7 @@ class FFPolicy(BasePolicy):
         action_probs = self.getting_action_probs(x)
         if print_info:
             print('The state features are: ', game_state_features, 'at the step ', game_state['step'])
-            print('The birth corner is: ', self.birth_corner)
+            print('The corner is: ', self.corner)
             print('The output of action is: ', x)
             print('The action probabilities are: ', action_probs)
         if teacher_acting:
@@ -106,7 +106,7 @@ class SFFPolicy(BasePolicy):
         action_probs = self.getting_action_probs(x)
         if print_info:
             print('The state features are: ', game_state_features, 'at the step ', game_state['step'])
-            print('The birth corner is: ', self.birth_corner)
+            print('The birth corner is: ', self.corner)
             print('The output of action is: ', x)
             print('The action probabilities are: ', action_probs)
         return action_probs
@@ -161,7 +161,7 @@ class LSTMPolicy(BasePolicy):
         
         if print_info:
             print('The state features are: ', game_state_features, 'at the step ', game_state['step'])
-            print('The birth corner is: ', self.birth_corner)
+            print('The birth corner is: ', self.corner)
             print('The output of action is: ', x)
             print('The action probabilities are: ', action_probs)
         return action_probs
@@ -211,7 +211,7 @@ class PPOPolicy(BasePolicy):
         
         if print_info:
             print('The state features are: ', game_state_features, 'at the step ', game_state['step'])
-            print('The birth corner is: ', self.birth_corner)
+            print('The birth corner is: ', self.corner)
             print('The output of action is: ', x)
             print('The action probabilities are: ', action_probs)
             print('The value is: ', value)
