@@ -64,14 +64,20 @@ class SFFPolicy(BasePolicy):
             for i in range(n_layers):
                 layers.append(nn.Linear(input_dim if i == 0 else hidden_dim, hidden_dim))
                 layers.append(nn.ReLU())
-            layers.append(nn.Linear(hidden_dim, 1))
+            # layers.append(nn.Linear(hidden_dim, 1))
             return nn.Sequential(*layers)
 
-        self.feature_dim = feature_dim
-        self.move_feature_dim = (feature_dim - 2) // 4
-        self.movement_net = make_layers(self.move_feature_dim, hidden_dim, n_layers)
-        self.wait_net = make_layers(self.feature_dim, hidden_dim, n_layers)
-        self.bomb_net = make_layers(self.feature_dim, hidden_dim, n_layers)
+        self.up_move_indices = torch.tensor([0, 8, 13, 18, 23, 28, 33])
+        self.right_move_indices = torch.tensor([1, 9, 14, 19, 24, 29, 34])
+        self.down_move_indices = torch.tensor([2, 10, 15, 20, 25, 30, 35])
+        self.left_move_indices = torch.tensor([3, 11, 16, 21, 26, 31, 36])
+        self.wait_indices = torch.tensor([4, 12, 17, 22, 27, 32, 37])
+        self.bomb_indices = torch.tensor([5, 6, 7, 17, 22, 27, 32, 37])
+        self.move_feature_dim = 7
+        self.bomb_feature_dim = 8
+        self.movement_net = make_layers(self.move_feature_dim, hidden_dim, n_layers-1)
+        self.bomb_net = make_layers(self.bomb_feature_dim, hidden_dim, n_layers-1)
+        self.output_layer = nn.Linear(hidden_dim*6, action_dim)
         self.n_layers = n_layers
         self.seq_len = seq_len
         
@@ -91,19 +97,23 @@ class SFFPolicy(BasePolicy):
         else:
             game_state_features = self.game_state_history[index]
         
-        indices = torch.tensor([0, 6, 10, 14, 18, 22, 26])
-        up = self.movement_net(torch.index_select(game_state_features, 0, indices))
-        right = self.movement_net(torch.index_select(game_state_features, 0, indices+1))
-        down = self.movement_net(torch.index_select(game_state_features, 0, indices+2))
-        left = self.movement_net(torch.index_select(game_state_features, 0, indices+3))
-        # bomb_indices = torch.tensor([])
-        wait = self.wait_net(game_state_features)
-        bomb = self.bomb_net(game_state_features)
+        
+        up = self.movement_net(torch.index_select(game_state_features, 0, self.up_move_indices))
+        right = self.movement_net(torch.index_select(game_state_features, 0, self.right_move_indices))
+        down = self.movement_net(torch.index_select(game_state_features, 0, self.down_move_indices))
+        left = self.movement_net(torch.index_select(game_state_features, 0, self.left_move_indices))
+        wait = self.movement_net(torch.index_select(game_state_features, 0, self.wait_indices))
+        bomb = self.bomb_net(torch.index_select(game_state_features, 0, self.bomb_indices))
         
         # combine the six actions into one vector
-        x = torch.stack((up, right, down, left, wait, bomb), dim=0).squeeze()
+        # print(up.shape)
+        x = torch.concat([up, right, down, left, wait, bomb], dim=0)
+        
+        # pass the output layer:
+        x = self.output_layer(x)
         
         action_probs = self.getting_action_probs(x)
+        
         if print_info:
             print('The state features are: ', game_state_features, 'at the step ', game_state['step'])
             print('The birth corner is: ', self.corner)
