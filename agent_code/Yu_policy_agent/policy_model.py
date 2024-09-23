@@ -73,6 +73,12 @@ class SFFPolicy(BasePolicy):
         self.left_move_indices = torch.tensor([3, 11, 16, 21, 26, 31, 36])
         self.wait_indices = torch.tensor([4, 12, 17, 22, 27, 32, 37])
         self.bomb_indices = torch.tensor([5, 6, 7, 17, 22, 27, 32, 37])
+        # self.up_move_indices = torch.tensor([0, 7, 12, 17, 22, 27, 32])
+        # self.right_move_indices = torch.tensor([1, 8, 13, 18, 23, 28, 33])
+        # self.down_move_indices = torch.tensor([2, 9, 14, 19, 24, 29, 34])
+        # self.left_move_indices = torch.tensor([3, 10, 15, 20, 25, 30, 35])
+        # self.wait_indices = torch.tensor([4, 11, 16, 21, 26, 31, 36])
+        # self.bomb_indices = torch.tensor([5, 6, 16, 21, 26, 31, 36])
         self.move_feature_dim = 7
         self.bomb_feature_dim = 8
         self.movement_net = make_layers(self.move_feature_dim, hidden_dim, n_layers-1)

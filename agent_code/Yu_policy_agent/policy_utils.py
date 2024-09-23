@@ -199,7 +199,7 @@ class BasePolicy(nn.Module):
         
         bombs_time = create_bombs_time(bombs, arena)
         
-        # 1. Situational awareness for the agent: Walls, crates, bombs, other agents, bomb_left
+        # 1. Situational awareness for the agent: Walls, crates, bombs, other agents, bomb_here
         # Features 1.1. determine which corner the agent is in: left top, right top, left bottom, right bottom
         
         # make use of the corner information 
@@ -234,23 +234,17 @@ class BasePolicy(nn.Module):
         right_feasible = right_self_pos in valid_position
         wait_feasible = self_pos in valid_position
         
-        # Features 1.3. bomb left
-        bomb_left = game_state['self'][2] > 0 
+        # Features 1.3. bomb here
+        bomb_here = game_state['self'][2] > 0 and not bomb_dropped_at_certain_death(self_pos, game_state, bombs_time)
         
         # Features 1.4. determine the number of targets will be destroyed by dropping the bomb
         # Features 1.5. whether free corners exist if dropping the bomb here
         crates_list = [(i, j) for i in range(s.COLS) for j in range(s.ROWS) if arena[i, j] == 1]
         targets_to_destroy = 0
         corners_to_hide = 0
-        if bomb_left:
-            print("If dropping the bomb at the current position, will the agent be destroyed?: ", bomb_dropped_at_certain_death(self_pos, game_state, bombs_time))
-            for x in range(max(self_pos[0]-3, 0), min(self_pos[0]+3, s.COLS-1)):
-                for y in range(max(self_pos[1]-3, 0), min(self_pos[1]+3, s.ROWS-1)):
-                    if bombs_time[x, y] == np.inf:
-                        if (x, y) in crates_list:
-                            targets_to_destroy += 1
-                        if (x, y) in others:
-                            targets_to_destroy += 5
+        if bomb_here:
+            # print("If dropping the bomb at the current position, will the agent be destroyed?: ", bomb_dropped_at_certain_death(self_pos, game_state, bombs_time))
+            targets_to_destroy = get_num_targets_destory(self_pos, game_state, bombs_time)
             candidate_corners = [(self_pos[0]-1, self_pos[1]-1), (self_pos[0]+1, self_pos[1]-1), (self_pos[0]-1, self_pos[1]+1), (self_pos[0]+1, self_pos[1]+1)]
             for corner in candidate_corners:
                 if arena[corner] == 0 and bombs_time[corner] == np.inf:
@@ -289,7 +283,7 @@ class BasePolicy(nn.Module):
         left_crates_score = 0
         right_crates_score = 0
         wait_crates_score = 0
-        # TODO: How to encode the crates information?
+        
         for (xc, yc) in crates_list:
             if bombs_time[xc, yc] == np.inf:
                 up_crates_score = max(up_crates_score, 1/(1+np.abs(xc-up_self_pos[0])+np.abs(yc-up_self_pos[1])))
@@ -297,6 +291,18 @@ class BasePolicy(nn.Module):
                 left_crates_score = max(left_crates_score, 1/(1+np.abs(xc-left_self_pos[0])+np.abs(yc-left_self_pos[1])))
                 right_crates_score = max(right_crates_score, 1/(1+np.abs(xc-right_self_pos[0])+np.abs(yc-right_self_pos[1])))
                 wait_crates_score = max(wait_crates_score, 1/(1+np.abs(xc-self_pos[0])+np.abs(yc-self_pos[1])))
+        # # compute the number of targets to destroy if moving to one direction
+        # up_targets_to_destroy = get_num_targets_destory(up_self_pos, game_state, bombs_time)
+        # down_targets_to_destroy = get_num_targets_destory(down_self_pos, game_state, bombs_time)
+        # left_targets_to_destroy = get_num_targets_destory(left_self_pos, game_state, bombs_time)
+        # right_targets_to_destroy = get_num_targets_destory(right_self_pos, game_state, bombs_time)
+        # wait_targets_to_destroy = get_num_targets_destory(self_pos, game_state, bombs_time)
+        
+        # up_crates_score = up_crates_score * up_targets_to_destroy
+        # down_crates_score = down_crates_score * down_targets_to_destroy
+        # left_crates_score = left_crates_score * left_targets_to_destroy
+        # right_crates_score = right_crates_score * right_targets_to_destroy
+        # wait_crates_score = wait_crates_score * wait_targets_to_destroy
         
         if not up_feasible:
             up_crates_score = 0
@@ -328,6 +334,12 @@ class BasePolicy(nn.Module):
         
         if self_pos in dead_ends:
             self.visited_dead_ends.append(self_pos)
+        
+        # up_dead_ends_score = up_dead_ends_score * up_targets_to_destroy
+        # down_dead_ends_score = down_dead_ends_score * down_targets_to_destroy
+        # left_dead_ends_score = left_dead_ends_score * left_targets_to_destroy
+        # right_dead_ends_score = right_dead_ends_score * right_targets_to_destroy
+        # wait_dead_ends_score = wait_dead_ends_score * wait_targets_to_destroy
         
         # if the direction is infeasible, set the score to be 0
         if not up_feasible:
@@ -381,35 +393,67 @@ class BasePolicy(nn.Module):
         wait_bomb_inv_time = 1/(1e-5+bombs_time[self_pos])
         
         for (xb, yb), t in bombs:
-            if abs(yb-self_pos[1]) + abs(xb-self_pos[0]) < 4:
+            if abs(yb-self_pos[1]) + abs(xb-self_pos[0]) < 4: 
+                # up_bomb_inv_distance = max(up_bomb_inv_distance, 1/(1e-5+min(abs(yb-up_self_pos[1]), abs(xb-up_self_pos[0]))))
+                # down_bomb_inv_distance = max(down_bomb_inv_distance, 1/(1e-5+min(abs(yb-down_self_pos[1]), abs(xb-down_self_pos[0]))))
+                # right_bomb_inv_distance = max(right_bomb_inv_distance, 1/(1e-5+min(abs(yb-right_self_pos[1]), abs(xb-right_self_pos[0]))))
+                # left_bomb_inv_distance = max(left_bomb_inv_distance, 1/(1e-5+min(abs(yb-left_self_pos[1]), abs(xb-left_self_pos[0]))))
+                # wait_bomb_inv_distance = max(wait_bomb_inv_distance, 1/(1e-5+min(abs(yb-self_pos[1]), abs(xb-self_pos[0]))))
                 # if the bomb is around a wall, then the agent could hide behind
-                up_bomb_inv_distance = max(up_bomb_inv_distance, 1/(1e-5+min(abs(yb-up_self_pos[1]), abs(xb-up_self_pos[0]))))
-                down_bomb_inv_distance = max(down_bomb_inv_distance, 1/(1e-5+min(abs(yb-down_self_pos[1]), abs(xb-down_self_pos[0]))))
-                right_bomb_inv_distance = max(right_bomb_inv_distance, 1/(1e-5+min(abs(yb-right_self_pos[1]), abs(xb-right_self_pos[0]))))
-                left_bomb_inv_distance = max(left_bomb_inv_distance, 1/(1e-5+min(abs(yb-left_self_pos[1]), abs(xb-left_self_pos[0]))))
-                wait_bomb_inv_distance = max(wait_bomb_inv_distance, 1/(1e-5+min(abs(yb-self_pos[1]), abs(xb-self_pos[0]))))
-                
                 # the bomb is on the right side of the wall and the agent is on the left side of the wall 
-                if arena[xb-1, yb] == -1 and self_pos[0] < xb: 
-                    up_bomb_inv_distance = max(up_bomb_inv_distance, 1/(1e-5+up_self_pos[0]-xb))
-                    down_bomb_inv_distance = max(down_bomb_inv_distance, 1/(1e-5+down_self_pos[0]-xb))
-                    wait_bomb_inv_distance = max(wait_bomb_inv_distance, 1/(1e-5+self_pos[0]-xb))
-                # the bomb is on the left side of the wall and the agent is on the right side of the wall
-                if arena[xb+1, yb] == -1 and self_pos[0] > xb:
-                    up_bomb_inv_distance = max(up_bomb_inv_distance, 1/(1e-5+up_self_pos[0]-xb))
-                    down_bomb_inv_distance = max(down_bomb_inv_distance, 1/(1e-5+down_self_pos[0]-xb))
-                    wait_bomb_inv_distance = max(wait_bomb_inv_distance, 1/(1e-5+self_pos[0]-xb))
-                # the bomb is on the bottom side of the wall and the agent is on the top side of the wall 
-                if arena[xb, yb-1] == -1 and self_pos[1] < yb:
-                    left_bomb_inv_distance = max(left_bomb_inv_distance, 1/(1e-5+yb-left_self_pos[1]))
-                    right_bomb_inv_distance = max(right_bomb_inv_distance, 1/(1e-5+yb-right_self_pos[1]))
-                    wait_bomb_inv_distance = max(wait_bomb_inv_distance, 1/(1e-5+yb-self_pos[1]))
-                # the bomb is on the top side of the wall and the agent is on the bottom side of the wall 
-                if arena[xb, yb+1] == -1 and self_pos[1] > yb:
-                    left_bomb_inv_distance = max(left_bomb_inv_distance, 1/(1e-5+left_self_pos[1]-yb))
-                    right_bomb_inv_distance = max(right_bomb_inv_distance, 1/(1e-5+right_self_pos[1]-yb))
-                    wait_bomb_inv_distance = max(wait_bomb_inv_distance, 1/(1e-5+self_pos[1]-yb))
-        
+                # if arena[xb-1, yb] == -1 and self_pos[0] < xb: 
+                #     up_bomb_inv_distance = max(up_bomb_inv_distance, 1/(1e-5+up_self_pos[0]-xb))
+                #     down_bomb_inv_distance = max(down_bomb_inv_distance, 1/(1e-5+down_self_pos[0]-xb))
+                #     wait_bomb_inv_distance = max(wait_bomb_inv_distance, 1/(1e-5+self_pos[0]-xb))
+                # # the bomb is on the left side of the wall and the agent is on the right side of the wall
+                # if arena[xb+1, yb] == -1 and self_pos[0] > xb:
+                #     up_bomb_inv_distance = max(up_bomb_inv_distance, 1/(1e-5+up_self_pos[0]-xb))
+                #     down_bomb_inv_distance = max(down_bomb_inv_distance, 1/(1e-5+down_self_pos[0]-xb))
+                #     wait_bomb_inv_distance = max(wait_bomb_inv_distance, 1/(1e-5+self_pos[0]-xb))
+                # # the bomb is on the bottom side of the wall and the agent is on the top side of the wall 
+                # if arena[xb, yb-1] == -1 and self_pos[1] < yb:
+                #     left_bomb_inv_distance = max(left_bomb_inv_distance, 1/(1e-5+yb-left_self_pos[1]))
+                #     right_bomb_inv_distance = max(right_bomb_inv_distance, 1/(1e-5+yb-right_self_pos[1]))
+                #     wait_bomb_inv_distance = max(wait_bomb_inv_distance, 1/(1e-5+yb-self_pos[1]))
+                # # the bomb is on the top side of the wall and the agent is on the bottom side of the wall 
+                # if arena[xb, yb+1] == -1 and self_pos[1] > yb:
+                #     left_bomb_inv_distance = max(left_bomb_inv_distance, 1/(1e-5+left_self_pos[1]-yb))
+                #     right_bomb_inv_distance = max(right_bomb_inv_distance, 1/(1e-5+right_self_pos[1]-yb))
+                #     wait_bomb_inv_distance = max(wait_bomb_inv_distance, 1/(1e-5+self_pos[1]-yb))
+
+                # if the bomb and the agent is on the same col
+                if xb == self_pos[0]:
+                    temp_up_bomb_inv_distance =  1/(1e-5+abs(up_self_pos[1]-yb))
+                    temp_down_bomb_inv_distance = 1/(1e-5+abs(down_self_pos[1]-yb))
+                    temp_wait_bomb_inv_distance = 1/(1e-5+abs(self_pos[1]-yb))
+                    if arena[xb, yb-1] == -1 and self_pos[1] < yb:
+                        temp_up_bomb_inv_distance = 0
+                        temp_down_bomb_inv_distance = 0
+                        temp_wait_bomb_inv_distance = 0
+                    if arena[xb, yb+1] == -1 and self_pos[1] > yb:
+                        temp_up_bomb_inv_distance = 0
+                        temp_down_bomb_inv_distance = 0
+                        temp_wait_bomb_inv_distance = 0
+                    up_bomb_inv_distance = max(up_bomb_inv_distance, temp_up_bomb_inv_distance)
+                    down_bomb_inv_distance = max(down_bomb_inv_distance, temp_down_bomb_inv_distance)
+                    wait_bomb_inv_distance = max(wait_bomb_inv_distance, temp_wait_bomb_inv_distance)
+                
+                # if the bomb and the agent is on the same row, and no wall between them
+                if yb == self_pos[1]:
+                    temp_left_bomb_inv_distance = max(left_bomb_inv_distance, 1/(1e-5+abs(left_self_pos[0]-xb)))
+                    temp_right_bomb_inv_distance = max(right_bomb_inv_distance, 1/(1e-5+abs(right_self_pos[0]-xb)))
+                    temp_wait_bomb_inv_distance = max(wait_bomb_inv_distance, 1/(1e-5+abs(self_pos[0]-xb)))
+                    if arena[xb-1, yb] == -1 and self_pos[0] < xb:
+                        temp_left_bomb_inv_distance = 0
+                        temp_right_bomb_inv_distance = 0
+                        temp_wait_bomb_inv_distance = 0
+                    if arena[xb+1, yb] == -1 and self_pos[0] > xb:
+                        temp_left_bomb_inv_distance = 0
+                        temp_right_bomb_inv_distance = 0
+                        temp_wait_bomb_inv_distance = 0
+                    left_bomb_inv_distance = max(left_bomb_inv_distance, temp_left_bomb_inv_distance)
+                    right_bomb_inv_distance = max(right_bomb_inv_distance, temp_right_bomb_inv_distance)
+                    wait_bomb_inv_distance = max(wait_bomb_inv_distance, temp_wait_bomb_inv_distance)
         # If the direction is unfeasible, then the distance is set to 1
         if not up_feasible:
             up_bomb_inv_distance = 1
@@ -429,7 +473,8 @@ class BasePolicy(nn.Module):
         
         # merge all features
         if self.corner == 0: # left top
-            features = np.array([up_feasible, right_feasible, down_feasible, left_feasible, wait_feasible, bomb_left, targets_to_destroy, corners_to_hide,
+            features = np.array([up_feasible, right_feasible, down_feasible, left_feasible, wait_feasible, bomb_here, targets_to_destroy, 
+                                 corners_to_hide,
                                 up_coins_score, right_coins_score, down_coins_score, left_coins_score, wait_coins_score,
                                 up_crates_score, right_crates_score, down_crates_score, left_crates_score, wait_crates_score,
                                 up_dead_ends_score, right_dead_ends_score, down_dead_ends_score, left_dead_ends_score, wait_dead_ends_score,
@@ -437,7 +482,8 @@ class BasePolicy(nn.Module):
                                 up_bomb_inv_distance, right_bomb_inv_distance, down_bomb_inv_distance, left_bomb_inv_distance, wait_bomb_inv_distance,
                                 up_bomb_inv_time, right_bomb_inv_time, down_bomb_inv_time, left_bomb_inv_time, wait_bomb_inv_time])
         elif self.corner == 1: # left bottom
-            features = np.array([down_feasible, right_feasible, up_feasible, left_feasible, wait_feasible, bomb_left, targets_to_destroy, corners_to_hide,
+            features = np.array([down_feasible, right_feasible, up_feasible, left_feasible, wait_feasible, bomb_here, targets_to_destroy, 
+                                 corners_to_hide,
                                 down_coins_score, right_coins_score, up_coins_score, left_coins_score, wait_coins_score,
                                 down_crates_score, right_crates_score, up_crates_score, left_crates_score, wait_crates_score,
                                 down_dead_ends_score, right_dead_ends_score, up_dead_ends_score, left_dead_ends_score, wait_dead_ends_score,
@@ -445,7 +491,8 @@ class BasePolicy(nn.Module):
                                 down_bomb_inv_distance, right_bomb_inv_distance, up_bomb_inv_distance, left_bomb_inv_distance, wait_bomb_inv_distance,
                                 down_bomb_inv_time, right_bomb_inv_time, up_bomb_inv_time, left_bomb_inv_time, wait_bomb_inv_time])
         elif self.corner == 2: # right top
-            features = np.array([up_feasible, left_feasible, down_feasible, right_feasible, wait_feasible, bomb_left, targets_to_destroy, corners_to_hide,
+            features = np.array([up_feasible, left_feasible, down_feasible, right_feasible, wait_feasible, bomb_here, targets_to_destroy, 
+                                 corners_to_hide,
                                 up_coins_score, left_coins_score, down_coins_score, right_coins_score, wait_coins_score,
                                 up_crates_score, left_crates_score, down_crates_score, right_crates_score, wait_crates_score,
                                 up_dead_ends_score, left_dead_ends_score, down_dead_ends_score, right_dead_ends_score, wait_dead_ends_score,
@@ -453,7 +500,8 @@ class BasePolicy(nn.Module):
                                 up_bomb_inv_distance, left_bomb_inv_distance, down_bomb_inv_distance, right_bomb_inv_distance, wait_bomb_inv_distance,
                                 up_bomb_inv_time, left_bomb_inv_time, down_bomb_inv_time, right_bomb_inv_time, wait_bomb_inv_time])
         elif self.corner == 3: # right bottom
-            features = np.array([down_feasible, left_feasible, up_feasible, right_feasible, wait_feasible, bomb_left, targets_to_destroy, corners_to_hide,
+            features = np.array([down_feasible, left_feasible, up_feasible, right_feasible, wait_feasible, bomb_here, targets_to_destroy, 
+                                 corners_to_hide,
                                  down_coins_score, left_coins_score, up_coins_score, right_coins_score, wait_coins_score,
                                  down_crates_score, left_crates_score, up_crates_score, right_crates_score, wait_crates_score,
                                  down_dead_ends_score, left_dead_ends_score, up_dead_ends_score, right_dead_ends_score, wait_dead_ends_score,
@@ -464,7 +512,6 @@ class BasePolicy(nn.Module):
             raise ValueError("The corner is not determined.")
         
         features = torch.tensor(features, dtype=torch.float32)
-        # print("features: ", features, "corner: ", self.corner)
         return features
     
     def getting_action_probs(self, x):
@@ -582,13 +629,12 @@ def get_num_targets_destory(pos, game_state, bombs_time):
                 count += 5
     return count
 
-def bomb_dropped_at_certain_death(pos, game_state, bombs_time):
+def bomb_dropped_at_certain_death(pos, game_state, bombs_time, time_left = 4):
     """
     calculate whether the bomb dropped at pos will kill himself
     """
     visited = []
     candidate = deque()
-    time_left = 4
     
     candidate.append((pos, time_left))
     

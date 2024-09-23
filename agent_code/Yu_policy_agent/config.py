@@ -7,7 +7,7 @@ MODEL_TYPE = 'SFF' # 'FF' or 'SFF' or 'LSTM' or 'PPO'
 SEQ_LEN = 1 # Sequence length for LSTM
 N_LAYERS = 2 # Number of layers for FF or LSTM
 HIDDEN_DIM = 32 # Hidden dimension for FF or LSTM
-LAST_EPISODE = 0 # Last episode number
+LAST_EPISODE = 55000 # Last episode number
 ALPHA = 0 # Weight for imitation learning loss
 
 FEATURE_DIM = 38
@@ -23,6 +23,7 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', LOAD_MODEL_N
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 
-TEST_MODE = True # Whether to test the model
+EVALUATION_MODE = True # Whether to evaluate the model
+TEST_MODE = False # Whether to test the model
 
-BEST_MODEL_PATH = os.path.join(os.path.dirname(__file__), 'best_model/III-III_SFF_seq_1_layer_2_alpha_0_hidden_32_45000.pt') # Best model
+BEST_MODEL_PATH = os.path.join(os.path.dirname(__file__), 'best_model/III-III_SFF_seq_1_layer_2_alpha_0_hidden_32_55000.pt') # Best model

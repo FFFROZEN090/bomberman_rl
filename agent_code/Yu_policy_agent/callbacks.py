@@ -11,7 +11,10 @@ from .policy_utils import *
 from .policy_model import *
 from .config import *
 
-if TEST_MODE:
+if EVALUATION_MODE:
+    WANDB = False
+    PRINT_INFO = False
+elif TEST_MODE:
     WANDB = False
     PRINT_INFO = True
 else:
