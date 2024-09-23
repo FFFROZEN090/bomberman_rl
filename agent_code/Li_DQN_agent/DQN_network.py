@@ -94,17 +94,21 @@ class DQN(nn.Module):
         return self.model(x)
 
 
-    def action(self, state, last_action_invalid=False ,last_action=None, device=DEVICE):
+    def action(self, state, low_state, last_action_invalid=False, last_action=None, rotate=0, device=DEVICE):
         if last_action is not None:
-            last_action = ACTIONS.index(last_action)
+            last_action_index = ACTIONS.index(last_action)
+        else:
+            last_action_index = None
+
         if np.random.rand() < self.exploration_prob:
             # Update the exploration probability
             self.exploration_prob *= self.decay_rate
-            # if last action is invalid, choose a random action that is not equal to the last action
-            if last_action_invalid and last_action != None:
-                action_code = np.random.choice([i for i in range(6) if i != last_action])
+            # If last action is invalid, choose a random action excluding the invalid one
+            if last_action_invalid and last_action_index is not None:
+                valid_actions = [i for i in range(len(ACTIONS)) if i != last_action_index]
+                action_code = np.random.choice(valid_actions)
             else:
-                action_code = np.random.choice(6)
+                action_code = np.random.choice(len(ACTIONS))
             update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
             return action_code, "exploration"
         else:
@@ -112,10 +116,72 @@ class DQN(nn.Module):
                 input = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(device)
                 self.to(device)
                 q_values = self.forward(input)
-                action_code = torch.argmax(q_values).item()
+
+                if last_action_invalid and last_action_index is not None and last_action_index in [0, 1, 2, 3, 4, 5]:
+                    # Mask the invalid action
+                    q_values[0, last_action_index] = float('-inf')
+
+                    # Identify movement actions (indices 0 to 3) excluding the invalid one
+                    movement_actions_indices = [0, 1, 2, 3, 4, 5]
+                    if last_action_index != 5:
+                        movement_actions_indices.remove(last_action_index)
+
+                    # Calculate opposite action index
+                    if last_action_index in [0, 1, 2, 3]:
+                        opposite_action_index = (last_action_index + 2) % 4  # Opposite direction
+                    else:
+                        opposite_action_index = random.choice([0, 1, 2, 3])  # Random movement action
+
+                    # Prepare list of valid movement actions and their indices
+                    valid_movement_indices = []
+                    for idx in movement_actions_indices:
+                        action = ACTIONS[idx]
+                        if is_action_valid(low_state, action):
+                            valid_movement_indices.append(idx)
+                        else:
+                            q_values[0, idx] = float('-inf')
+
+                    # Check if opposite action is valid
+                    if opposite_action_index in valid_movement_indices:
+                        # Assign probabilities
+                        probabilities = []
+                        total_prob = 0.0
+                        for idx in valid_movement_indices:
+                            if idx == opposite_action_index:
+                                prob = 0.4
+                            else:
+                                prob = 0.2
+                            probabilities.append(prob)
+                            total_prob += prob
+
+                        # Normalize probabilities
+                        probabilities = [p / total_prob for p in probabilities]
+
+                        # Randomly select an action based on the probabilities
+                        selected_idx = np.random.choice(valid_movement_indices, p=probabilities)
+                        action_code = selected_idx
+                    else:
+                        # If opposite action is not valid, redistribute probabilities
+                        num_valid = len(valid_movement_indices)
+                        if num_valid > 0:
+                            probabilities = [1.0 / num_valid] * num_valid
+                            selected_idx = np.random.choice(valid_movement_indices, p=probabilities)
+                            action_code = selected_idx
+                        else:
+                            # No valid movement actions; proceed to mask invalid actions and select the best action
+                            for i, action in enumerate(ACTIONS):
+                                if not is_action_valid(low_state, action):
+                                    q_values[0, i] = float('-inf')
+                            action_code = torch.argmax(q_values).item()
+                else:
+                    # Mask all invalid actions
+                    for i, action in enumerate(ACTIONS):
+                        if not is_action_valid(low_state, action):
+                            q_values[0, i] = float('-inf')
+                    action_code = torch.argmax(q_values).item()
+
                 update_action_buffer(self.action_buffer, ACTIONS[action_code], self.action_buffer_size)
                 return action_code, "network"
-
 
 
     def sample_experiences(self, replay_buffer, experience_buffer, batch_size):
@@ -138,10 +204,16 @@ class DQN(nn.Module):
     def convert_experiences_to_tensors(self, experiences, device):
         # Separate the batch into numpy arrays
         states = np.array([exp.global_state for exp in experiences])
+        agent_states = np.array([exp.agent_state for exp in experiences])
         actions = np.array([exp.action for exp in experiences])
         rewards = np.array([exp.reward for exp in experiences])
         next_states = np.array([exp.global_next_state for exp in experiences])
+        next_agent_states = np.array([exp.agent_next_state for exp in experiences])
         dones = np.array([exp.done for exp in experiences]).astype(bool)
+        last_actions = np.array([exp.last_action for exp in experiences])
+        last_actions_invalid = np.array([exp.last_action_invalid for exp in experiences])
+        # Convert last actions to valid indices
+        last_actions = [ACTIONS.index(action) if action is not None else None for action in last_actions]
 
         # Normalize states and next_states
         states = self.normalize_states(states)
@@ -149,12 +221,16 @@ class DQN(nn.Module):
 
         # Convert numpy arrays to PyTorch tensors and move to the specified device
         states = torch.FloatTensor(states).to(device)
+        
         actions = torch.LongTensor(actions).to(device)
         rewards = torch.FloatTensor(rewards).to(device)
         next_states = torch.FloatTensor(next_states).to(device)
-        dones = torch.BoolTensor(dones).to(device)
+        
+        dones = torch.tensor(dones, dtype=torch.float32).to(device)
+        last_actions = torch.LongTensor(last_actions).to(device)
+        last_actions_invalid = torch.BoolTensor(last_actions_invalid).to(device)
 
-        return states, actions, rewards, next_states, dones
+        return states, agent_states, actions, rewards, next_states, next_agent_states, dones, last_actions, last_actions_invalid
 
     def normalize_states(self, states):
         # Implement normalization logic here
@@ -165,47 +241,81 @@ class DQN(nn.Module):
         return states
 
 
-    def dqn_train(self, replay_buffer, experience_buffer, batch_size, target_model = None, device=DEVICE):
+    def dqn_train(self, replay_buffer, experience_buffer, batch_size, target_model=None, device=DEVICE):
         self.epoch += 1
         # Sample experiences
         experiences = self.sample_experiences(replay_buffer, experience_buffer, batch_size)
         
-        # Convert experiences to tensors using the new member function
-        states, actions, rewards, next_states, dones = self.convert_experiences_to_tensors(experiences, device)
+        # Unpack and convert experiences to tensors
+        states, agent_states, actions, rewards, next_states, next_agent_states, dones, last_actions, last_actions_invalid = self.convert_experiences_to_tensors(experiences, device)
 
         # Convert model weights to device
         self.to(device)
+        # Define a large negative finite value for masking
+        large_negative_value = -1e5
 
         # Compute Q-values for current states
-        current_q_values = self(states).gather(1, actions.unsqueeze(1)).squeeze(1) + 1e-9
+        current_q_values_full = self(states)  # Get Q-values for all actions
 
-        # Max Q-values action number for next states
-        best_next_actions = self(next_states).max(1)[1]
+        # Mask invalid actions in current Q-values
+        for i in range(states.size(0)):
+            invalid_actions = get_invalid_actions(agent_states[i])
+            current_q_values_full[i, invalid_actions] = large_negative_value
 
+        # Now select the Q-values corresponding to the actions taken
+        current_q_values = current_q_values_full.gather(1, actions.unsqueeze(1)).squeeze(1) + 1e-9
 
         # Compute Q-values for next states
         with torch.no_grad():
             if target_model is None:
-                next_q_values = self(next_states).max(1)[0] + 1e-9
-            elif target_model is not None:
+                next_q_values_full = self(next_states)
+            else:
                 target_model.to(device)
-                # Take the best action from the target model
-                next_q_values = target_model(next_states).gather(1, best_next_actions.unsqueeze(1)).squeeze(1) + 1e-9
+                next_q_values_full = target_model(next_states)
+            
+            # Mask invalid actions in next Q-values
+            for i in range(next_states.size(0)):
+                invalid_actions = get_invalid_actions(next_agent_states[i])
+                next_q_values_full[i, invalid_actions] = large_negative_value
+            
+            # Incorporate opposite action preference
+            opposite_action_bonus = 1.0  # Adjust as needed
+            for i in range(next_states.size(0)):
+                if last_actions_invalid[i]:
+                    last_action = last_actions[i]
+                    if last_action in [0, 1, 2, 3]:  # Movement actions
+                        opposite_action = (last_action + 2) % 4
+                        # Ensure the opposite action is valid
+                        if opposite_action not in get_invalid_actions(next_agent_states[i]):
+                            next_q_values_full[i, opposite_action] += opposite_action_bonus
 
-        target_q_values = rewards + (1 - dones.float()) * self.gamma * next_q_values
+            # Select the maximum Q-value among valid actions
+            next_q_values = next_q_values_full.max(1)[0] + 1e-9
 
-        if self.epoch % 10 == 0:
-            if target_q_values.sum() < 0:
-                self.exploration_prob = min(self.exploration_prob + 0.05, 0.15)
-
+        target_q_values = rewards + (1 - dones) * self.gamma * next_q_values
 
         # Compute loss
         loss = nn.HuberLoss()(current_q_values, target_q_values)
+
+        # Optionally, add penalty for invalid Q-values
+        invalid_q_values = []
+        
+        for i in range(states.size(0)):
+            invalid_actions = get_invalid_actions(agent_states[i])
+            if len(invalid_actions) > 0:
+                invalid_qs = current_q_values_full[i, invalid_actions]
+                invalid_q_values.append(invalid_qs)
+        if invalid_q_values:
+            invalid_q_values = torch.cat(invalid_q_values)
+            invalid_q_loss = torch.mean(invalid_q_values ** 2)
+            invalid_q_loss_weight = 0.1  # Adjust as needed
+            loss += invalid_q_loss_weight * invalid_q_loss
 
         # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+
         if self.wandb:
             wandb.log({
                 "sum of rewards": rewards.sum(),
@@ -250,7 +360,6 @@ class DQN(nn.Module):
         self.survived_rounds = []
         # Restrict the exploration probability
         self.exploration_prob = max(self.exploration_prob * self.decay_rate, 0.1)
-
 
         return loss.item()
 
@@ -392,10 +501,10 @@ def repeat_action(action_buffer: List, action_buffer_size: int) -> int:
 
 
 def compute_td_loss(model, target_model, experiences, gamma=0.99, device=DEVICE):
-    states = torch.FloatTensor([exp.agent_state for exp in experiences]).to(device)
+    states = torch.FloatTensor([exp.global_state for exp in experiences]).to(device)
     actions = torch.LongTensor([exp.action for exp in experiences]).to(device)
     rewards = torch.FloatTensor([exp.reward for exp in experiences]).to(device)
-    next_states = torch.FloatTensor([exp.agent_next_state for exp in experiences]).to(device)
+    next_states = torch.FloatTensor([exp.global_next_state for exp in experiences]).to(device)
     dones = torch.FloatTensor([exp.done for exp in experiences]).to(device)
 
     # Compute Q(s, a) - the model computes Q(s), then we select the columns of actions taken
@@ -432,6 +541,57 @@ def is_downstream_trend(data: list) -> bool:
     
     # Check if the slope is negative, indicating a downward trend
     return slope < 0
+
+"""
+Inverse the action from raw state to the mirrored state
+"""
+def inverse_rotate_action(rotated_action, angle):
+    # If action is WAIT or BOMB, return the same action
+    if rotated_action == 4 or rotated_action == 5:
+        return rotated_action
+    if angle == 90:
+        return (rotated_action - 1) % 4
+    elif angle == 180:
+        return (rotated_action - 2) % 4
+    elif angle == 270:
+        return (rotated_action - 3) % 4
+    else:
+        return rotated_action
+    
+def is_action_valid(state, action):
+    x, y = np.where(state[0, :, :] == 1)  # Agent's position
+    x, y = x[0], y[0]
+    if action == 'UP' and is_cell_free(state, x, y - 1):
+        return True
+    elif action == 'DOWN' and is_cell_free(state, x, y + 1):
+        return True
+    elif action == 'LEFT' and is_cell_free(state, x - 1, y):
+        return True
+    elif action == 'RIGHT' and is_cell_free(state, x + 1, y):
+        return True
+    elif action == 'WAIT' and state[10, x, y] == 1:
+        return True
+    elif action == 'BOMB' and state[10, x, y] == 1:
+        return True
+    return False
+
+def get_invalid_actions(state):
+    invalid_actions = []
+    for i, action in enumerate(ACTIONS):
+        if not is_action_valid(state, action):
+            invalid_actions.append(i)
+    return invalid_actions
+
+
+def is_cell_free(state, x, y):
+    # Check boundaries
+    if x < 0 or x >= 17 or y < 0 or y >= 17:
+        return False
+    # Check for walls, boxes, or other obstacles
+    if state[4, x, y] == 1 or state[5, x, y] == 1 or state[8, x, y] >= 1 or state[7, :, :] == 1:
+        return False
+    # You can add more checks if needed (e.g., other players)
+    return True
 
 
 if __name__ == "__main__":

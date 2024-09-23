@@ -65,20 +65,20 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     self.last_action_invalid = e.INVALID_ACTION in events
 
     # Get DQN state
-    state = get_state(new_game_state, rotate=self.rotate, bomb_valid=new_game_state['self'][2])
+    state, low_state  = get_state(new_game_state, rotate=self.rotate, bomb_valid=new_game_state['self'][2])
 
     # Get old state
-    old_state = get_state(old_game_state, rotate=self.rotate, bomb_valid=old_game_state['self'][2])
+    old_state, old_low_state = get_state(old_game_state, rotate=self.rotate, bomb_valid=old_game_state['self'][2])
 
     # Get reward
     reward = calculate_reward(events, self.last_action_type)
 
-    self.last_action = self_action
+    self.last_action = ACTIONS[action_number]
 
     # If self.last_reward is not None, then store the experience
 
-    self.experience_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
-    self.replay_buffer.add(Experience(old_state, None, action_number, reward, state, None, False))
+    self.experience_buffer.add(Experience(old_state, old_low_state, action_number, reward, state, low_state, False, self.last_action, self.last_action_invalid))
+    self.replay_buffer.add(Experience(old_state, old_low_state, action_number, reward, state, low_state, False, self.last_action, self.last_action_invalid))
 
     # Update last reward
     self.last_reward = reward
@@ -96,7 +96,7 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
     # add position to visited history
     self.visited_history.append(new_game_state['self'][3])
     # check if the agent is in a loop, if so, add an event to events list
-    if self.visited_history.count(new_game_state['self'][3]) > 3:
+    if self.visited_history.count(new_game_state['self'][3]) > 4:
         events.append(LOOP_DETECTED)
     
     # distance to coins: if getting close to coins, add an event to events list
@@ -117,7 +117,7 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
         
     # If the agent was in danger zone but now safe, add an event to events list
         # If the agent is farther from the bomb, add an event to events list
-    if bombs_time[old_game_state['self'][3]] < 3:
+    if bombs_time[old_game_state['self'][3]] < 2:
         if bombs_time[new_game_state['self'][3]] == 5:
             # If the agent was in danger zone but now safe, add an event to events list
             events.append(ESCAPE_FROM_BOMB)
@@ -136,7 +136,7 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
                     events.append(ESCAPE_FROM_BOMB_BY_CORNER)
     
         # If the agent falls into the bomb range from a safer zone, add an event to events list
-    if self_action != 'BOMB' and bombs_time[old_game_state['self'][3]] == 5 and bombs_time[new_game_state['self'][3]] < 2:
+    if self_action != 'BOMB' and bombs_time[old_game_state['self'][3]] == 5 and bombs_time[new_game_state['self'][3]] <= 2:
         events.append(FALL_INTO_BOMB)
         
     # If the agent dropped a bomb and crates will be destroyed, add an event to events list
@@ -188,6 +188,14 @@ def calculate_events(self, old_game_state: dict, self_action: str, new_game_stat
         if ACTIONS.index(self.last_action) < 4 and 'INVALID_ACTION' not in events and ((ACTIONS.index(self.last_action) + 2) % 4 == ACTIONS.index(self_action)):
             events.append('OPPOSITE_ACTION')
 
+    # If crate detroyed by bomb and not GOT KILLED, add an event to events list
+    if 'CRATE_DESTROYED' in events and 'GOT_KILLED' not in events:
+        events.append('CRATE_DESTROYED_NOT_KILLED')
+
+    if self.last_events is not None:
+        if 'CRATE_DESTROYED_NOT_KILLED' in self.last_events and 'WAITED' in events:
+            events.append('WATI_UNTIL_SAFE')
+
     events.append(self_action)
 
     return events
@@ -205,17 +213,17 @@ def end_of_round(self, last_game_state, last_action, events):
     self.last_action_invalid = True
 
     # Get DQN state
-    state = get_state(last_game_state, rotate=self.rotate, bomb_valid=False)
+    state, low_state = get_state(last_game_state, rotate=self.rotate, bomb_valid=False)
 
     # Get old state
-    old_state = get_state(last_game_state, rotate=self.rotate, bomb_valid=last_game_state['self'][2])
+    old_state, old_low_state = get_state(last_game_state, rotate=self.rotate, bomb_valid=last_game_state['self'][2])
 
     # Get reward
     reward = calculate_reward(events, self.last_action_type)
 
 
-    self.experience_buffer.add(Experience(old_state, None, action_number, reward, state, None, True))
-    self.replay_buffer.add(Experience(old_state, None, action_number, reward, state, None, True))
+    self.experience_buffer.add(Experience(old_state, old_low_state, action_number, reward, state, low_state, True, last_action, self.last_action_invalid))
+    self.replay_buffer.add(Experience(old_state, old_low_state, action_number, reward, state, low_state, True, last_action, self.last_action_invalid))
 
     self.logger.info(f'Events: {events}')
 
@@ -301,3 +309,19 @@ def inverse_rotate_action(rotated_action, angle):
         return (rotated_action - 3) % 4
     else:
         return rotated_action
+    
+    """
+Rotate the action by 90, 180, 270 degrees.
+"""
+def rotate_action(action, angle):
+    # If action is WAIT or BOMB, return the same action
+    if action == 4 or action == 5:
+        return action
+    if angle == 90:
+        return (action + 1) % 4
+    elif angle == 180:
+        return (action + 2) % 4
+    elif angle == 270:
+        return (action + 3) % 4
+    else:
+        return action

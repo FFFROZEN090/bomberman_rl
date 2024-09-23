@@ -135,7 +135,7 @@ def get_high_level_state(state):
     high_level_state[1, :, :] = np.where(state[7, :, :] == 1, 0, high_level_state[1, :, :])
 
     # Blast area is not safe
-    high_level_state[1, :, :] = np.where(state[8, :, :] >= 1, 3, high_level_state[1, :, :])  # Blast area cells are not safe
+    high_level_state[1, :, :] = np.where(state[8, :, :] >= 1, 0, high_level_state[1, :, :])  # Blast area cells are not safe
 
     # Destroyable blocks (channel 2)
     high_level_state[2, :, :] = np.any(state[[1,2,3,5], :, :] == 1, axis=0)  # Players are destroyable
@@ -378,138 +378,11 @@ def get_state(game_state, rotate, bomb_valid=False):
     # 
 
     # Append bomb valid to high level state
-    bomb_valid = np.zeros((17, 17), dtype=np.int8)
-    bomb_valid[:, :] = bomb_valid
-    high_level_state = np.append(high_level_state, bomb_valid[np.newaxis, :, :], axis=0)
-    return high_level_state
-
-def rule_based_action(agent, game_state):
-    """
-    Called each game step to determine the agent's next action.
-
-    You can find out about the state of the game environment via game_state,
-    which is a dictionary. Consult 'get_state_for_agent' in environment.py to see
-    what it contains.
-    """
-    agent.logger.info('Picking action according to rule set')
-    # Check if we are in a different round
-    if game_state["round"] != agent.current_round:
-        reset_self(agent)
-        agent.current_round = game_state["round"]
-    # Gather information about the game state
-    arena = game_state['field']
-    _, score, bombs_left, (x, y) = game_state['self']
-    bombs = game_state['bombs']
-    bomb_xys = [xy for (xy, t) in bombs]
-    others = [xy for (n, s, b, xy) in game_state['others']]
-    coins = game_state['coins']
-    bomb_map = np.ones(arena.shape) * 5
-    for (xb, yb), t in bombs:
-        for (i, j) in [(xb + h, yb) for h in range(-3, 4)] + [(xb, yb + h) for h in range(-3, 4)]:
-            if (0 < i < bomb_map.shape[0]) and (0 < j < bomb_map.shape[1]):
-                bomb_map[i, j] = min(bomb_map[i, j], t)
-
-    # If agent has been in the same location three times recently, it's a loop
-    if agent.coordinate_history.count((x, y)) > 2:
-        agent.ignore_others_timer = 5
-    else:
-        agent.ignore_others_timer -= 1
-    agent.coordinate_history.append((x, y))
-
-    # Check which moves make sense at all
-    directions = [(x, y), (x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
-    valid_tiles, valid_actions = [], []
-    for d in directions:
-        if ((arena[d] == 0) and
-                (game_state['explosion_map'][d] < 1) and
-                (bomb_map[d] > 0) and
-                (not d in others) and
-                (not d in bomb_xys)):
-            valid_tiles.append(d)
-    if (x - 1, y) in valid_tiles: valid_actions.append('LEFT')
-    if (x + 1, y) in valid_tiles: valid_actions.append('RIGHT')
-    if (x, y - 1) in valid_tiles: valid_actions.append('UP')
-    if (x, y + 1) in valid_tiles: valid_actions.append('DOWN')
-    if (x, y) in valid_tiles: valid_actions.append('WAIT')
-    # Disallow the BOMB action if agent dropped a bomb in the same spot recently
-    if (bombs_left > 0) and (x, y) not in agent.bomb_history: valid_actions.append('BOMB')
-    agent.logger.debug(f'Valid actions: {valid_actions}')
-
-    # Collect basic action proposals in a queue
-    # Later on, the last added action that is also valid will be chosen
-    action_ideas = ['UP', 'DOWN', 'LEFT', 'RIGHT']
-    shuffle(action_ideas)
-
-    # Compile a list of 'targets' the agent should head towards
-    cols = range(1, arena.shape[0] - 1)
-    rows = range(1, arena.shape[0] - 1)
-    dead_ends = [(x, y) for x in cols for y in rows if (arena[x, y] == 0)
-                 and ([arena[x + 1, y], arena[x - 1, y], arena[x, y + 1], arena[x, y - 1]].count(0) == 1)]
-    crates = [(x, y) for x in cols for y in rows if (arena[x, y] == 1)]
-    targets = coins + dead_ends + crates
-    # Add other agents as targets if in hunting mode or no crates/coins left
-    if agent.ignore_others_timer <= 0 or (len(crates) + len(coins) == 0):
-        targets.extend(others)
-
-    # Exclude targets that are currently occupied by a bomb
-    targets = [targets[i] for i in range(len(targets)) if targets[i] not in bomb_xys]
-
-    # Take a step towards the most immediately interesting target
-    free_space = arena == 0
-    if agent.ignore_others_timer > 0:
-        for o in others:
-            free_space[o] = False
-    d = look_for_targets(free_space, (x, y), targets, agent.logger)
-    if d == (x, y - 1): action_ideas.append('UP')
-    if d == (x, y + 1): action_ideas.append('DOWN')
-    if d == (x - 1, y): action_ideas.append('LEFT')
-    if d == (x + 1, y): action_ideas.append('RIGHT')
-    if d is None:
-        agent.logger.debug('All targets gone, nothing to do anymore')
-        action_ideas.append('WAIT')
-
-    # Add proposal to drop a bomb if at dead end
-    if (x, y) in dead_ends:
-        action_ideas.append('BOMB')
-    # Add proposal to drop a bomb if touching an opponent
-    if len(others) > 0:
-        if (min(abs(xy[0] - x) + abs(xy[1] - y) for xy in others)) <= 1:
-            action_ideas.append('BOMB')
-    # Add proposal to drop a bomb if arrived at target and touching crate
-    if d == (x, y) and ([arena[x + 1, y], arena[x - 1, y], arena[x, y + 1], arena[x, y - 1]].count(1) > 0):
-        action_ideas.append('BOMB')
-
-    # Add proposal to run away from any nearby bomb about to blow
-    for (xb, yb), t in bombs:
-        if (xb == x) and (abs(yb - y) < 4):
-            # Run away
-            if (yb > y): action_ideas.append('UP')
-            if (yb < y): action_ideas.append('DOWN')
-            # If possible, turn a corner
-            action_ideas.append('LEFT')
-            action_ideas.append('RIGHT')
-        if (yb == y) and (abs(xb - x) < 4):
-            # Run away
-            if (xb > x): action_ideas.append('LEFT')
-            if (xb < x): action_ideas.append('RIGHT')
-            # If possible, turn a corner
-            action_ideas.append('UP')
-            action_ideas.append('DOWN')
-    # Try random direction if directly on top of a bomb
-    for (xb, yb), t in bombs:
-        if xb == x and yb == y:
-            action_ideas.extend(action_ideas[:4])
-
-    # Pick last action added to the proposals list that is also valid
-    while len(action_ideas) > 0:
-        a = action_ideas.pop()
-        if a in valid_actions:
-            # Keep track of chosen action for cycle detection
-            if a == 'BOMB':
-                agent.bomb_history.append((x, y))
-
-            return a
-
+    bomb_valid_matrix = np.zeros((17, 17), dtype=np.int8)
+    bomb_valid_matrix[:, :] = bomb_valid
+    high_level_state = np.append(high_level_state, bomb_valid_matrix[np.newaxis, :, :], axis=0)
+    low_level_state = np.append(low_level_state, bomb_valid_matrix[np.newaxis, :, :], axis=0)
+    return high_level_state, low_level_state
 
 
 """

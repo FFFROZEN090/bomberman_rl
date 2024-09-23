@@ -102,7 +102,7 @@ def act(agent, game_state: dict):
     elif 8 >= agent.spwan_position[0] >= 1 and agent.spwan_position[1] >= 8:
         agent.rotate = 270
     # Get the current state representation
-    current_state = get_state(game_state, rotate=agent.rotate, bomb_valid=game_state['self'][2])
+    current_state, low_state = get_state(game_state, rotate=agent.rotate, bomb_valid=game_state['self'][2])
 
     # Get Agent's position from current state, first dimension where 1 is present
     agent_position = np.where(current_state[0] == 1)
@@ -111,7 +111,7 @@ def act(agent, game_state: dict):
         agent.logger.debug(f"New round started")
 
     # Use the model to choose an action
-    action, action_type = agent.model.action(current_state, agent.last_action_invalid, agent.last_action)
+    action, action_type = agent.model.action(current_state, low_state, agent.last_action_invalid, agent.last_action, agent.rotate)
     agent.logger.debug(f'Raw Action: {ACTIONS[action]}, Mirror: {agent.rotate}')
 
     # Convert the action index to the corresponding action string
@@ -136,6 +136,7 @@ def act(agent, game_state: dict):
     agent.logger.info(f'Actual Action: {action_string}')
 
     agent.last_action_type = action_type
+
 
     return action_string
 
