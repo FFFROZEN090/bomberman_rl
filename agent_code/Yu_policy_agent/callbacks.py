@@ -45,9 +45,7 @@ def setup(self):
         self.model.load(MODEL_PATH)
         self.logger.info('Model for training loaded')
     else:
-        self.model.load(MODEL_PATH)
-        # self.model.eval()
-        # self.model.requires_grad_(False)
+        self.model.load(BEST_MODEL_PATH)
         self.logger.info('Model for evaluation loaded')
     
 
@@ -57,8 +55,6 @@ def act(self, game_state) -> str:
     action_probs = self.model.forward(game_state=game_state, print_info=PRINT_INFO)
     action_probs = action_probs.detach().numpy()
     # print(action_probs.shape)
-
-    # Behavioral cloning if training and episode < TEACH_EPISODE
     action = np.random.choice(ACTIONS, p=action_probs)
     
     # record the action index

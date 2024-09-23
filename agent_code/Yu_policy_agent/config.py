@@ -1,16 +1,16 @@
 # Hyperparameters
 import os
 
-MODEL_NAME = 'I-I' # Model name
-LOAD_MODEL_NAME = 'I-I' # Model name to load
-MODEL_TYPE = 'FF' # 'FF' or 'SFF' or 'LSTM' or 'PPO'
+MODEL_NAME = 'III-III' # Model name
+LOAD_MODEL_NAME = 'III-III' # Model name to load
+MODEL_TYPE = 'SFF' # 'FF' or 'SFF' or 'LSTM' or 'PPO'
 SEQ_LEN = 1 # Sequence length for LSTM
 N_LAYERS = 2 # Number of layers for FF or LSTM
-HIDDEN_DIM = 128 # Hidden dimension for FF or LSTM
-LAST_EPISODE = 20000 # Last episode number
+HIDDEN_DIM = 32 # Hidden dimension for FF or LSTM
+LAST_EPISODE = 0 # Last episode number
 ALPHA = 0 # Weight for imitation learning loss
 
-FEATURE_DIM = 30
+FEATURE_DIM = 38
 
 # Path
 
@@ -25,4 +25,4 @@ ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 
 TEST_MODE = True # Whether to test the model
 
-EXAMINE_PATH = '' # Best model
+BEST_MODEL_PATH = os.path.join(os.path.dirname(__file__), 'best_model/III-III_SFF_seq_1_layer_2_alpha_0_hidden_32_45000.pt') # Best model
