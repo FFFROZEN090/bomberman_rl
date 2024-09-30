@@ -9,7 +9,7 @@ import wandb
 from .rulebased_teacher import TeacherModel
 from collections import deque
 
-from .config import ACTIONS
+from .config import ACTIONS, ARENA_SYMMETRY
 
 # General policy class
 class BasePolicy(nn.Module):
@@ -472,44 +472,54 @@ class BasePolicy(nn.Module):
             wait_bomb_inv_time = 1
         
         # merge all features
-        if self.corner == 0: # left top
+        if ARENA_SYMMETRY:
+            if self.corner == 0: # left top
+                features = np.array([up_feasible, right_feasible, down_feasible, left_feasible, wait_feasible, bomb_here, targets_to_destroy, 
+                                    corners_to_hide,
+                                    up_coins_score, right_coins_score, down_coins_score, left_coins_score, wait_coins_score,
+                                    up_crates_score, right_crates_score, down_crates_score, left_crates_score, wait_crates_score,
+                                    up_dead_ends_score, right_dead_ends_score, down_dead_ends_score, left_dead_ends_score, wait_dead_ends_score,
+                                    up_opponents_score, right_opponents_score, down_opponents_score, left_opponents_score, wait_opponents_score,
+                                    up_bomb_inv_distance, right_bomb_inv_distance, down_bomb_inv_distance, left_bomb_inv_distance, wait_bomb_inv_distance,
+                                    up_bomb_inv_time, right_bomb_inv_time, down_bomb_inv_time, left_bomb_inv_time, wait_bomb_inv_time])
+            elif self.corner == 1: # left bottom
+                features = np.array([down_feasible, right_feasible, up_feasible, left_feasible, wait_feasible, bomb_here, targets_to_destroy, 
+                                    corners_to_hide,
+                                    down_coins_score, right_coins_score, up_coins_score, left_coins_score, wait_coins_score,
+                                    down_crates_score, right_crates_score, up_crates_score, left_crates_score, wait_crates_score,
+                                    down_dead_ends_score, right_dead_ends_score, up_dead_ends_score, left_dead_ends_score, wait_dead_ends_score,
+                                    down_opponents_score, right_opponents_score, up_opponents_score, left_opponents_score, wait_opponents_score,
+                                    down_bomb_inv_distance, right_bomb_inv_distance, up_bomb_inv_distance, left_bomb_inv_distance, wait_bomb_inv_distance,
+                                    down_bomb_inv_time, right_bomb_inv_time, up_bomb_inv_time, left_bomb_inv_time, wait_bomb_inv_time])
+            elif self.corner == 2: # right top
+                features = np.array([up_feasible, left_feasible, down_feasible, right_feasible, wait_feasible, bomb_here, targets_to_destroy, 
+                                    corners_to_hide,
+                                    up_coins_score, left_coins_score, down_coins_score, right_coins_score, wait_coins_score,
+                                    up_crates_score, left_crates_score, down_crates_score, right_crates_score, wait_crates_score,
+                                    up_dead_ends_score, left_dead_ends_score, down_dead_ends_score, right_dead_ends_score, wait_dead_ends_score,
+                                    up_opponents_score, left_opponents_score, down_opponents_score, right_opponents_score, wait_opponents_score,
+                                    up_bomb_inv_distance, left_bomb_inv_distance, down_bomb_inv_distance, right_bomb_inv_distance, wait_bomb_inv_distance,
+                                    up_bomb_inv_time, left_bomb_inv_time, down_bomb_inv_time, right_bomb_inv_time, wait_bomb_inv_time])
+            elif self.corner == 3: # right bottom
+                features = np.array([down_feasible, left_feasible, up_feasible, right_feasible, wait_feasible, bomb_here, targets_to_destroy, 
+                                    corners_to_hide,
+                                    down_coins_score, left_coins_score, up_coins_score, right_coins_score, wait_coins_score,
+                                    down_crates_score, left_crates_score, up_crates_score, right_crates_score, wait_crates_score,
+                                    down_dead_ends_score, left_dead_ends_score, up_dead_ends_score, right_dead_ends_score, wait_dead_ends_score,
+                                    down_opponents_score, left_opponents_score, up_opponents_score, right_opponents_score, wait_opponents_score,
+                                    down_bomb_inv_distance, left_bomb_inv_distance, up_bomb_inv_distance, right_bomb_inv_distance, wait_bomb_inv_distance,
+                                    down_bomb_inv_time, left_bomb_inv_time, up_bomb_inv_time, right_bomb_inv_time, wait_bomb_inv_time])
+            else:
+                raise ValueError("The corner is not determined.")
+        else:
             features = np.array([up_feasible, right_feasible, down_feasible, left_feasible, wait_feasible, bomb_here, targets_to_destroy, 
-                                 corners_to_hide,
+                                corners_to_hide,
                                 up_coins_score, right_coins_score, down_coins_score, left_coins_score, wait_coins_score,
                                 up_crates_score, right_crates_score, down_crates_score, left_crates_score, wait_crates_score,
                                 up_dead_ends_score, right_dead_ends_score, down_dead_ends_score, left_dead_ends_score, wait_dead_ends_score,
                                 up_opponents_score, right_opponents_score, down_opponents_score, left_opponents_score, wait_opponents_score,
                                 up_bomb_inv_distance, right_bomb_inv_distance, down_bomb_inv_distance, left_bomb_inv_distance, wait_bomb_inv_distance,
                                 up_bomb_inv_time, right_bomb_inv_time, down_bomb_inv_time, left_bomb_inv_time, wait_bomb_inv_time])
-        elif self.corner == 1: # left bottom
-            features = np.array([down_feasible, right_feasible, up_feasible, left_feasible, wait_feasible, bomb_here, targets_to_destroy, 
-                                 corners_to_hide,
-                                down_coins_score, right_coins_score, up_coins_score, left_coins_score, wait_coins_score,
-                                down_crates_score, right_crates_score, up_crates_score, left_crates_score, wait_crates_score,
-                                down_dead_ends_score, right_dead_ends_score, up_dead_ends_score, left_dead_ends_score, wait_dead_ends_score,
-                                down_opponents_score, right_opponents_score, up_opponents_score, left_opponents_score, wait_opponents_score,
-                                down_bomb_inv_distance, right_bomb_inv_distance, up_bomb_inv_distance, left_bomb_inv_distance, wait_bomb_inv_distance,
-                                down_bomb_inv_time, right_bomb_inv_time, up_bomb_inv_time, left_bomb_inv_time, wait_bomb_inv_time])
-        elif self.corner == 2: # right top
-            features = np.array([up_feasible, left_feasible, down_feasible, right_feasible, wait_feasible, bomb_here, targets_to_destroy, 
-                                 corners_to_hide,
-                                up_coins_score, left_coins_score, down_coins_score, right_coins_score, wait_coins_score,
-                                up_crates_score, left_crates_score, down_crates_score, right_crates_score, wait_crates_score,
-                                up_dead_ends_score, left_dead_ends_score, down_dead_ends_score, right_dead_ends_score, wait_dead_ends_score,
-                                up_opponents_score, left_opponents_score, down_opponents_score, right_opponents_score, wait_opponents_score,
-                                up_bomb_inv_distance, left_bomb_inv_distance, down_bomb_inv_distance, right_bomb_inv_distance, wait_bomb_inv_distance,
-                                up_bomb_inv_time, left_bomb_inv_time, down_bomb_inv_time, right_bomb_inv_time, wait_bomb_inv_time])
-        elif self.corner == 3: # right bottom
-            features = np.array([down_feasible, left_feasible, up_feasible, right_feasible, wait_feasible, bomb_here, targets_to_destroy, 
-                                 corners_to_hide,
-                                 down_coins_score, left_coins_score, up_coins_score, right_coins_score, wait_coins_score,
-                                 down_crates_score, left_crates_score, up_crates_score, right_crates_score, wait_crates_score,
-                                 down_dead_ends_score, left_dead_ends_score, up_dead_ends_score, right_dead_ends_score, wait_dead_ends_score,
-                                 down_opponents_score, left_opponents_score, up_opponents_score, right_opponents_score, wait_opponents_score,
-                                 down_bomb_inv_distance, left_bomb_inv_distance, up_bomb_inv_distance, right_bomb_inv_distance, wait_bomb_inv_distance,
-                                 down_bomb_inv_time, left_bomb_inv_time, up_bomb_inv_time, right_bomb_inv_time, wait_bomb_inv_time])
-        else:
-            raise ValueError("The corner is not determined.")
         
         features = torch.tensor(features, dtype=torch.float32)
         return features
@@ -521,17 +531,19 @@ class BasePolicy(nn.Module):
             result[j] = x[i]
             return result
         # according to the forward output and self corner information, determine the action probabilities
-        if self.corner == 1: # left bottom
-            # swap the first and the third element of the output
-            x = swap(x, 0, 2)
-        elif self.corner == 2: # right top
-            # swap the second and the fourth element of the output
-            x = swap(x, 1, 3)
-        elif self.corner == 3: # right bottom
-            # swap the output elements
-            x = swap(x, 0, 2)
-            x = swap(x, 1, 3)
-        # normalize the output
+        if ARENA_SYMMETRY:
+            if self.corner == 1: # left bottom
+                # swap the first and the third element of the output
+                x = swap(x, 0, 2)
+            elif self.corner == 2: # right top
+                # swap the second and the fourth element of the output
+                x = swap(x, 1, 3)
+            elif self.corner == 3: # right bottom
+                # swap the output elements
+                x = swap(x, 0, 2)
+                x = swap(x, 1, 3)
+            # normalize the output
+            
         action_probs = F.softmax(x, dim=-1)
         
         # print("The action probabilities are: ", action_probs)
@@ -565,12 +577,11 @@ class BasePolicy(nn.Module):
             
             # Calculate the imitation learning loss (cross-entropy loss between teacher's action and agent's action)
             if self.teacher_action_history[t] is not None:
-                teacher_action_idx = ACTIONS.index(self.teacher_action_history[t])
+                teacher_action_prob = self.teacher_action_history[t]
             else:
-                teacher_action_idx = 5 # WAIT action
+                teacher_action_prob = torch.zeros(self.action_dim) # WAIT action
+                teacher_action_prob[5] = 1
                 print('The teacher action is None at step ', t)
-            teacher_action_prob = torch.zeros(self.action_dim)
-            teacher_action_prob[teacher_action_idx] = 1
             teacher_loss = F.cross_entropy(action_prob, teacher_action_prob)
             
             total_teacher_loss += teacher_loss

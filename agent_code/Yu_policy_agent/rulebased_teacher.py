@@ -1,7 +1,9 @@
 import numpy as np
 from collections import deque
 from random import shuffle
+import torch
 
+ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 class TeacherModel:
     def __init__(self):
         self.bomb_history = deque([], 5)
@@ -37,6 +39,9 @@ class TeacherModel:
         for action in valid_actions:
             features = self._calculate_features(game_state, action, targets, bomb_map)
             action_features[action] = features
+            
+        # Get action probabilities
+        action_probs = self._getting_action_probs(action_features)
 
         # Choose the best action based on features
         chosen_action = self._choose_action(action_features)
@@ -48,7 +53,7 @@ class TeacherModel:
         return chosen_action, {
             'valid_actions': valid_actions,
             'action_features': action_features,
-        }
+        }, action_probs
 
     def _get_bomb_map(self, arena, bombs):
         bomb_map = np.ones(arena.shape) * 5
@@ -128,6 +133,22 @@ class TeacherModel:
                 best_action = action
         
         return best_action
+    
+    def _getting_action_probs(self, action_features):
+        action_probs = np.zeros(6)
+        for action, features in action_features.items():
+            score = (
+                -5 * features['distance_to_nearest_target'] +
+                -10 * features['bomb_danger'] +
+                2 * features['crate_nearby'] +
+                1 * features['is_movement']
+            )
+            action_probs[ACTIONS.index(action)] = score
+        action_probs = np.exp(action_probs)
+        action_probs = action_probs / np.sum(action_probs)
+        # convert to torch tensor
+        action_probs = torch.tensor(action_probs, dtype=torch.float32)
+        return action_probs
 
     def reset(self):
         self.bomb_history = deque([], 5)

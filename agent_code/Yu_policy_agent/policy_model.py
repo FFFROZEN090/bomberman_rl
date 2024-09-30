@@ -30,8 +30,8 @@ class FFPolicy(BasePolicy):
     def forward(self, game_state = None, index = None, print_info = False, teacher_acting = False):
         if index is None:
             # record the teacher's action for imitation learning
-            teacher_action, _ = self.teacher.act(game_state)
-            self.teacher_action_history.append(teacher_action)
+            teacher_action, _, teacher_action_probs = self.teacher.act(game_state)
+            self.teacher_action_history.append(teacher_action_probs)
             
             game_state_features = self.state_to_features(game_state)
             self.game_state_history.append(game_state_features)
@@ -73,12 +73,6 @@ class SFFPolicy(BasePolicy):
         self.left_move_indices = torch.tensor([3, 11, 16, 21, 26, 31, 36])
         self.wait_indices = torch.tensor([4, 12, 17, 22, 27, 32, 37])
         self.bomb_indices = torch.tensor([5, 6, 7, 17, 22, 27, 32, 37])
-        # self.up_move_indices = torch.tensor([0, 7, 12, 17, 22, 27, 32])
-        # self.right_move_indices = torch.tensor([1, 8, 13, 18, 23, 28, 33])
-        # self.down_move_indices = torch.tensor([2, 9, 14, 19, 24, 29, 34])
-        # self.left_move_indices = torch.tensor([3, 10, 15, 20, 25, 30, 35])
-        # self.wait_indices = torch.tensor([4, 11, 16, 21, 26, 31, 36])
-        # self.bomb_indices = torch.tensor([5, 6, 16, 21, 26, 31, 36])
         self.move_feature_dim = 7
         self.bomb_feature_dim = 8
         self.movement_net = make_layers(self.move_feature_dim, hidden_dim, n_layers-1)
@@ -95,8 +89,8 @@ class SFFPolicy(BasePolicy):
     def forward(self, game_state = None, index = None, print_info = False):
         if index is None:
             # record the teacher's action for imitation learning
-            teacher_action, _ = self.teacher.act(game_state)
-            self.teacher_action_history.append(teacher_action)
+            teacher_action, _, teacher_action_probs = self.teacher.act(game_state)
+            self.teacher_action_history.append(teacher_action_probs)
             
             game_state_features = self.state_to_features(game_state)
             self.game_state_history.append(game_state_features)
@@ -150,8 +144,8 @@ class LSTMPolicy(BasePolicy):
     def forward(self, game_state = None, index=None, print_info = False):
         if index is None:
             # record the teacher's action for imitation learning
-            teacher_action, _ = self.teacher.act(game_state)
-            self.teacher_action_history.append(teacher_action)
+            teacher_action, _, teacher_action_probs = self.teacher.act(game_state)
+            self.teacher_action_history.append(teacher_action_probs)
             
             game_state_features = self.state_to_features(game_state)
             self.state_seqs.append(game_state_features)
@@ -207,8 +201,8 @@ class PPOPolicy(BasePolicy):
     def forward(self, game_state = None, index=None, print_info = False):
         if index is None:
             # record the teacher's action for imitation learning
-            teacher_action, _ = self.teacher.act(game_state)
-            self.teacher_action_history.append(teacher_action)
+            teacher_action, _, teacher_action_probs = self.teacher.act(game_state)
+            self.teacher_action_history.append(teacher_action_probs)
             
             game_state_features = self.state_to_features(game_state)
             self.game_state_history.append(game_state_features)
